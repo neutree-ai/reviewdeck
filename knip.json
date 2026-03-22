@@ -1,0 +1,14 @@
+{
+  "entry": [
+    "src/cli/main.ts",
+    "src/web/app.tsx",
+    "src/web/vite.config.ts",
+    "src/web/vite.config.inline.ts"
+  ],
+  "project": ["src/**/*.ts", "src/**/*.tsx"],
+  "vitest": {
+    "entry": ["src/**/*.test.ts"]
+  },
+  "ignoreDependencies": ["vitest", "vite", "tailwindcss"],
+  "ignoreExportsUsedInFile": true
+}

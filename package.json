@@ -1,0 +1,57 @@
+{
+  "name": "reviewdeck",
+  "version": "0.2.1",
+  "description": "Split large PR diffs into reviewable sub-patches via indexed groups.",
+  "bin": {
+    "reviewdeck": "dist/reviewdeck.mjs"
+  },
+  "files": [
+    "dist",
+    "skills/reviewdeck",
+    "README.md"
+  ],
+  "type": "module",
+  "scripts": {
+    "test": "vp test",
+    "check": "vp check",
+    "check-deps": "depcruise src --config .dependency-cruiser.cjs",
+    "knip": "knip",
+    "build:cli": "esbuild src/cli/main.ts --bundle --platform=node --format=esm --outfile=dist/reviewdeck.mjs --banner:js='#!/usr/bin/env node'",
+    "build:web": "vp build -c src/web/vite.config.ts",
+    "build:html": "vp build -c src/web/vite.config.inline.ts",
+    "build": "npm run build:cli && npm run build:web && npm run build:html",
+    "lint": "vp test && vp check && knip && depcruise src --config .dependency-cruiser.cjs",
+    "pack:dry-run": "npm pack --dry-run",
+    "prepack": "npm run build",
+    "prepare": "vp config"
+  },
+  "dependencies": {
+    "@pierre/diffs": "^1.1.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "dependency-cruiser": "^17.3.9",
+    "esbuild": "^0.27.4",
+    "knip": "^5.86.0",
+    "tailwindcss": "^4.2.1",
+    "tsx": "^4.21.0",
+    "vite-plus": "latest"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
+    "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "npm@11.11.1"
+}

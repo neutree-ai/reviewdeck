@@ -1,0 +1,318 @@
+@import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&display=swap");
+
+@theme {
+  /* Warm dark palette — charcoal base with amber accent */
+  --color-background: oklch(0.155 0.008 60);
+  --color-foreground: oklch(0.88 0.01 80);
+  --color-card: oklch(0.185 0.008 60);
+  --color-card-foreground: oklch(0.88 0.01 80);
+  --color-surface: oklch(0.205 0.01 60);
+  --color-muted: oklch(0.28 0.01 60);
+  --color-muted-foreground: oklch(0.58 0.01 80);
+  --color-border: oklch(0.28 0.008 60);
+  --color-border-subtle: oklch(0.23 0.006 60);
+  --color-input: oklch(0.22 0.008 60);
+  --color-ring: oklch(0.75 0.15 75);
+
+  /* Amber/gold primary */
+  --color-primary: oklch(0.78 0.145 75);
+  --color-primary-foreground: oklch(0.18 0.02 60);
+  --color-primary-muted: oklch(0.78 0.145 75 / 0.12);
+
+  --color-secondary: oklch(0.28 0.01 60);
+  --color-secondary-foreground: oklch(0.78 0.01 80);
+  --color-accent: oklch(0.24 0.01 60);
+  --color-accent-foreground: oklch(0.88 0.01 80);
+
+  /* Semantic */
+  --color-destructive: oklch(0.62 0.2 25);
+  --color-destructive-foreground: oklch(0.98 0.005 80);
+  --color-success: oklch(0.65 0.17 155);
+  --color-success-foreground: oklch(0.98 0.005 80);
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+
+body {
+  @apply bg-background text-foreground antialiased;
+  font-family: var(--font-sans);
+}
+
+/* Subtle noise texture overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Scrollbar                                                           */
+/* ------------------------------------------------------------------ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.35 0.01 60);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.42 0.01 60);
+}
+
+/* ------------------------------------------------------------------ */
+/* Progress rail (sidebar track)                                       */
+/* ------------------------------------------------------------------ */
+
+.rail-track {
+  position: relative;
+}
+
+.rail-track::before {
+  content: "";
+  position: absolute;
+  left: 22px;
+  top: 16px;
+  bottom: 16px;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--color-border) 0%, var(--color-border-subtle) 100%);
+}
+
+/* ------------------------------------------------------------------ */
+/* Animations                                                          */
+/* ------------------------------------------------------------------ */
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 oklch(0.78 0.145 75 / 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px oklch(0.78 0.145 75 / 0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.35s ease-out both;
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Stagger children */
+.stagger-children > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.stagger-children > *:nth-child(2) {
+  animation-delay: 40ms;
+}
+.stagger-children > *:nth-child(3) {
+  animation-delay: 80ms;
+}
+.stagger-children > *:nth-child(4) {
+  animation-delay: 120ms;
+}
+.stagger-children > *:nth-child(5) {
+  animation-delay: 160ms;
+}
+.stagger-children > *:nth-child(6) {
+  animation-delay: 200ms;
+}
+.stagger-children > *:nth-child(7) {
+  animation-delay: 240ms;
+}
+.stagger-children > *:nth-child(8) {
+  animation-delay: 280ms;
+}
+.stagger-children > *:nth-child(9) {
+  animation-delay: 320ms;
+}
+.stagger-children > *:nth-child(10) {
+  animation-delay: 360ms;
+}
+
+/* ------------------------------------------------------------------ */
+/* Inline review annotations                                           */
+/* ------------------------------------------------------------------ */
+
+.annotation-card {
+  --annotation-bg: oklch(0.24 0.012 255 / 0.98);
+  --annotation-border: oklch(0.38 0.02 255 / 0.95);
+  --annotation-meta: oklch(0.78 0.015 255);
+  --annotation-text: oklch(0.96 0.005 80);
+  border: 1px solid var(--annotation-border);
+  background: var(--annotation-bg);
+  color: var(--annotation-text);
+  isolation: isolate;
+}
+
+.annotation-card-human {
+  --annotation-bg: oklch(0.235 0.012 250 / 0.98);
+  --annotation-border: oklch(0.36 0.02 250 / 0.95);
+  --annotation-meta: oklch(0.77 0.015 250);
+  --annotation-text: oklch(0.965 0.005 80);
+}
+
+.annotation-card-agent-pending {
+  --annotation-bg: oklch(0.31 0.06 72 / 0.96);
+  --annotation-border: oklch(0.58 0.12 72 / 0.95);
+  --annotation-meta: oklch(0.93 0.02 85);
+  --annotation-text: oklch(0.985 0.005 90);
+}
+
+.annotation-card-agent-accepted {
+  --annotation-bg: oklch(0.29 0.055 160 / 0.97);
+  --annotation-border: oklch(0.48 0.09 160 / 0.95);
+  --annotation-meta: oklch(0.9 0.02 160);
+  --annotation-text: oklch(0.98 0.005 160);
+}
+
+.annotation-card-agent-rejected {
+  --annotation-bg: oklch(0.22 0.008 255 / 0.96);
+  --annotation-border: oklch(0.31 0.012 255 / 0.95);
+  --annotation-meta: oklch(0.72 0.01 255);
+  --annotation-text: oklch(0.9 0.01 80);
+}
+
+.annotation-meta {
+  color: var(--annotation-meta);
+}
+
+.annotation-body {
+  color: var(--annotation-text);
+}
+
+.annotation-button-accept {
+  border-color: oklch(0.5 0.09 160 / 0.9) !important;
+  background: oklch(0.34 0.065 160 / 0.92) !important;
+  color: oklch(0.98 0.005 160) !important;
+}
+
+.annotation-button-accept:hover {
+  background: oklch(0.38 0.07 160 / 0.96) !important;
+}
+
+.annotation-button-reject {
+  border-color: oklch(0.34 0.012 255 / 0.9) !important;
+  background: oklch(0.26 0.01 255 / 0.88) !important;
+  color: oklch(0.9 0.01 80) !important;
+}
+
+.annotation-button-reject:hover {
+  background: oklch(0.3 0.01 255 / 0.92) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* File toolbar                                                        */
+/* ------------------------------------------------------------------ */
+
+.file-toolbar {
+  backdrop-filter: blur(14px);
+  background: linear-gradient(
+    180deg,
+    oklch(0.19 0.008 60 / 0.97) 0%,
+    oklch(0.185 0.008 60 / 0.93) 100%
+  );
+  border-bottom: 1px solid oklch(0.28 0.008 60 / 0.92);
+  box-shadow: 0 8px 24px oklch(0 0 0 / 0.14);
+}
+
+.file-toolbar-additions {
+  color: oklch(0.72 0.13 155);
+}
+
+.file-toolbar-deletions {
+  color: oklch(0.7 0.17 25);
+}
+
+/* ------------------------------------------------------------------ */
+/* Sidebar comment flow                                                */
+/* ------------------------------------------------------------------ */
+
+.comment-progress-track {
+  display: flex;
+  height: 8px;
+  background: oklch(0.235 0.008 60);
+  border: 1px solid oklch(0.3 0.008 60 / 0.8);
+}
+
+.comment-progress-segment {
+  height: 100%;
+}
+
+.comment-progress-segment-included {
+  background: linear-gradient(90deg, oklch(0.63 0.12 155), oklch(0.69 0.13 155));
+}
+
+.comment-progress-segment-pending {
+  background: linear-gradient(90deg, oklch(0.72 0.13 75), oklch(0.78 0.14 75));
+}
+
+.comment-progress-segment-omitted {
+  background: linear-gradient(90deg, oklch(0.44 0.02 255), oklch(0.5 0.02 255));
+}
+
+.comment-progress-empty {
+  flex: 1 1 auto;
+  background: linear-gradient(90deg, oklch(0.22 0.008 60), oklch(0.25 0.008 60));
+}
+
+.comment-progress-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-muted-foreground);
+}
+
+.comment-progress-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 9999px;
+}
+
+.comment-progress-dot-included {
+  background: oklch(0.67 0.13 155);
+}
+
+.comment-progress-dot-pending {
+  background: oklch(0.76 0.14 75);
+}
+
+.comment-progress-dot-omitted {
+  background: oklch(0.48 0.02 255);
+}
