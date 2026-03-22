@@ -11,7 +11,7 @@ Split large PR diffs into reviewable sub-patches via LLM-assigned groups.
 Run it ad hoc:
 
 ```bash
-npx reviewdeck@latest index pr.diff
+npx reviewdeck@^0.2.0 index pr.diff
 ```
 
 Or install it into another repo:
@@ -42,14 +42,14 @@ npx skills add neutree-ai/reviewdeck --skill reviewdeck --global
 
 ```bash
 gh pr diff 123 > pr.diff
-npx reviewdeck@latest index pr.diff > pr.index.txt
+npx reviewdeck@^0.2.0 index pr.diff > pr.index.txt
 ```
 
 Have the agent use the `reviewdeck` skill to turn the indexed changes into split metadata JSON, then:
 
 ```bash
-cat split.json | npx reviewdeck@latest split pr.diff - -o output/
-npx reviewdeck@latest render output/
+cat split.json | npx reviewdeck@^0.2.0 split pr.diff - -o output/
+npx reviewdeck@^0.2.0 render output/
 ```
 
 If the goal is PR review, `render` is the normal next step after `split`; `split` only proves the sub-patches are valid and ordered.
