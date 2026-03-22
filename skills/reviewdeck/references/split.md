@@ -1,22 +1,22 @@
-# Task: Split a PR diff into reviewable sub-patches
+# Split Guidance
 
-You are helping a code reviewer. Given a large PR diff, split it into a sequence of smaller, logically coherent sub-patches that are easier to review.
+Use this reference only when the basic rules in `SKILL.md` are not enough.
+
+## Goal
+
+Split a large PR diff into a sequence of smaller, logically coherent sub-patches that are easier to review.
 
 ## Principles
 
-- **Peripheral first, core last**: infrastructure, config, types -> implementation -> tests
-- **Independent first, dependent last**: if B depends on A, A comes first
-- **One concern per group**: don't mix refactoring with new features
-- **Reviewer-oriented descriptions**: describe why this group exists in the review flow, not just the surface area it touches
-- **Co-review drafts when warranted**: if you notice a concrete review concern while splitting, attach it as a draft comment instead of switching into a full review report
-
-## Input
-
-The indexed change lines are provided separately. Each `[N]` is a **change index**. `-` = deletion, `+` = addition, `LN` = line number.
+- Peripheral first, core last: infrastructure, config, types -> implementation -> tests
+- Independent first, dependent last: if B depends on A, A comes first
+- One concern per group: do not mix refactoring with new features unless the diff makes that unavoidable
+- Reviewer-oriented descriptions: describe why this group exists in the review flow, not just the touched area
+- Co-review drafts when warranted: if you notice a concrete review concern while splitting, attach it as a draft comment instead of switching into a full review report
 
 ## Output format
 
-Output a single JSON object (no markdown fences, no commentary before or after):
+Output a single JSON object with no markdown fences and no extra commentary:
 
 ```json
 {
@@ -41,15 +41,14 @@ Output a single JSON object (no markdown fences, no commentary before or after):
 
 ## Rules
 
-1. Every change index must appear in exactly one group
-2. No index may appear in more than one group
-3. No index may be omitted
-4. Groups are ordered — group 1 is applied first, group N last
-5. Aim for 3-6 groups (adjust based on the PR's complexity)
-6. Each group's `description` should read like a review-guiding commit message — a concise summary line, optionally followed by detail
-7. Use range syntax for consecutive indices: `"0-2"` means `[0, 1, 2]`. Single indices can be plain numbers: `5`
-8. `draftComments` is optional, but when you see a concrete reviewer-worthy concern while splitting, include it.
-9. Each draft comment must anchor to a `change` that belongs to the same group.
+1. Every change index must appear in exactly one group.
+2. No index may appear in more than one group.
+3. No index may be omitted.
+4. Groups are ordered. Group 1 is reviewed first, group N last.
+5. Aim for 3-6 groups, adjusting only when the PR shape clearly requires it.
+6. Use range syntax for consecutive indices: `"0-2"` means `[0, 1, 2]`.
+7. `draftComments` is optional.
+8. Each draft comment must anchor to a `change` that belongs to the same group.
 
 ## Description guidance
 
@@ -83,7 +82,7 @@ Worse:
 
 ## Draft comment guidance
 
-Use `draftComments` selectively but decisively. They are not the final submitted comments. They are candidate review comments that the human reviewer can accept or reject during `render`.
+Use `draftComments` selectively but decisively. They are candidate review comments that the human reviewer can accept or reject during `render`.
 
 Prefer draft comments that:
 
@@ -91,13 +90,11 @@ Prefer draft comments that:
 - are anchored to one concrete indexed change
 - read like something worth sending to the source review if accepted
 
-If you already have enough evidence from the diff to state a concrete concern, prefer emitting the draft comment now rather than omitting it.
-
 Avoid draft comments that are only:
 
 - a summary of what the code does
 - generic praise or noise
-- a full review section pasted into one comment
+- a vague warning with no concrete concern
 
 Better:
 
