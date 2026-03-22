@@ -1,4 +1,4 @@
-# Stacked Diff
+# reviewdeck
 
 Split large PR diffs into reviewable sub-patches via LLM-assigned groups.
 
