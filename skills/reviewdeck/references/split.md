@@ -8,11 +8,28 @@ Split a large PR diff into a sequence of smaller, logically coherent sub-patches
 
 ## Principles
 
-- Peripheral first, core last: infrastructure, config, types -> implementation -> tests
-- Independent first, dependent last: if B depends on A, A comes first
-- One concern per group: do not mix refactoring with new features unless the diff makes that unavoidable
+- Pattern-aware ordering: choose a review flow that matches the user's preference or the diff shape
+- Cohesive grouping: keep tightly related changes together, and separate unrelated concerns when doing so improves reviewability
+- Stable review flow: order groups so a reviewer can build context without jumping back and forth unnecessarily
 - Reviewer-oriented descriptions: describe why this group exists in the review flow, not just the touched area
 - Co-review drafts when warranted: if you notice a concrete review concern while splitting, attach it as a draft comment instead of switching into a full review report
+
+## Review patterns
+
+Use one of these patterns when ordering groups:
+
+- `deps-first`: review prerequisites before dependents so later groups do not rely on unseen context. This is the default when the user does not express a preference.
+- `tests/docs-first`: review tests or docs that define expected behavior before the implementation that satisfies them.
+
+## Pattern selection
+
+Use these heuristics:
+
+- If the user names a preferred flow, follow it.
+- If the prompt has no clear preference and asking would help, briefly offer `deps-first` and `tests/docs-first`.
+- If the user does not choose, continue with `deps-first`.
+- Prefer `tests/docs-first` only when the tests or docs materially clarify expected behavior or review intent.
+- Fall back to `deps-first` when tests are trivial, purely mechanical, or depend on too much unseen implementation detail.
 
 ## Output format
 
@@ -45,7 +62,7 @@ Output a single JSON object with no markdown fences and no extra commentary:
 2. No index may appear in more than one group.
 3. No index may be omitted.
 4. Groups are ordered. Group 1 is reviewed first, group N last.
-5. Aim for 3-6 groups, adjusting only when the PR shape clearly requires it.
+5. Choose the number of groups based on the PR shape. Use as many groups as needed to keep the review understandable, but avoid splitting tightly coupled changes just to create more groups.
 6. Use range syntax for consecutive indices: `"0-2"` means `[0, 1, 2]`.
 7. `draftComments` is optional.
 8. Each draft comment must anchor to a `change` that belongs to the same group.
@@ -66,14 +83,14 @@ Avoid descriptions that are only:
 - an as-is restatement of filenames, component names, or ticket labels
 - too vague to distinguish this group from adjacent ones
 
-Better:
+Examples that usually work well:
 
 - `Add version selection plumbing so the upgrade flow has a stable entry point`
 - `Show current version and status before wiring upgrade actions`
 - `Isolate the upgrade dialog and action handling as the main behavior change`
 - `Add e2e coverage once the upgrade flow is in place`
 
-Worse:
+Examples that are often too vague:
 
 - `version selector`
 - `status display`
@@ -82,7 +99,7 @@ Worse:
 
 ## Draft comment guidance
 
-Use `draftComments` selectively but decisively. They are candidate review comments that the human reviewer can accept or reject during `render`.
+Use `draftComments` selectively. They are candidate review comments that the human reviewer can accept or reject during `render`.
 
 Prefer draft comments that:
 
@@ -96,12 +113,12 @@ Avoid draft comments that are only:
 - generic praise or noise
 - a vague warning with no concrete concern
 
-Better:
+Examples that usually work well:
 
 - `Potential regression: this update path bypasses the sanitizing transform used by the normal edit flow.`
 - `This selector keeps the old version when no compatible options exist, so the form may submit an unavailable version.`
 
-Worse:
+Examples that are often too weak:
 
 - `Adds selector logic`
 - `Looks risky`

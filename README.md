@@ -54,7 +54,8 @@ npx reviewdeck@latest render output/
 
 If the goal is PR review, `render` is the normal next step after `split`; `split` only proves the sub-patches are valid and ordered.
 `render` is meant to produce a human review UI or artifact, not to replace the human review with automatic findings.
-The split metadata descriptions should read like reviewer-facing guideposts, not raw area labels.
+When generating split metadata, the skill can follow lightweight review patterns such as `deps-first` or `tests/docs-first`; if the user has no clear preference, `deps-first` is the default.
+The split metadata descriptions are most useful when they explain why the changes are grouped together or what the reviewer should verify in that step.
 The split metadata can also include optional group-level `draftComments`, which render shows inline as agent co-review drafts for the human reviewer to accept or reject.
 When `render` submits, it prints a JSON object with final `comments` plus `draftComments` status so an agent can tell which drafts were accepted before deciding whether to post them back to a PR.
 

@@ -4,12 +4,12 @@ description: Split a large PR diff into a sequence of smaller, reviewable sub-pa
 compatibility: Requires Node.js 18+ and npx (or the reviewdeck CLI installed globally).
 metadata:
   author: yanzhen
-  version: "0.2"
+  version: "0.4"
 ---
 
 # Reviewdeck
 
-You help a code reviewer turn a large PR diff into a small review deck, then hand it off for human review.
+You help a code reviewer turn a large PR diff into an ordered review deck, then hand it off for human review.
 
 Default posture:
 
@@ -57,7 +57,21 @@ npx reviewdeck@latest index pr.diff
 
 This prints a numbered list of changed lines. Those indices are the units you group in the split metadata.
 
-### 3. Generate split metadata
+### 3. Choose a review pattern
+
+Before generating split metadata, decide whether the user has already expressed a preferred review flow.
+
+- If the user already implies a preferred flow, follow it.
+- If the user does not express a clear preference and interactive guidance would help, briefly offer these patterns:
+  - `deps-first` (recommended): order groups so earlier groups introduce context and dependencies needed by later groups.
+  - `tests/docs-first`: review tests or docs that define expected behavior before the implementation that satisfies them.
+- If the user does not choose, continue without blocking. Default to `deps-first`.
+
+Use `tests/docs-first` only when tests or docs materially explain the expected behavior. If the tests are trivial or only mirror the implementation, stay with `deps-first`.
+
+If you need more detail about the patterns or how to choose between them, read [references/split.md](references/split.md).
+
+### 4. Generate split metadata
 
 Output a single JSON object:
 
@@ -75,8 +89,10 @@ Output a single JSON object:
 Default rules:
 
 - Every change index must appear exactly once.
-- Aim for 3-6 groups unless the PR is unusually small or large.
-- Order groups for review: peripheral first, core logic later, tests last.
+- Choose the number of groups based on reviewability. Keep tightly related changes together, and split only when doing so makes the review sequence clearer.
+- Choose an ordering that matches the selected review pattern.
+- Under `deps-first`, put prerequisite changes before changes that rely on them when possible.
+- Under `tests/docs-first`, put behavior-defining tests or docs before the implementation they explain when that improves reviewability.
 - `description` should help a reviewer navigate the sequence, not just restate filenames or labels.
 - When equivalent, prefer compact range syntax such as `"0-23"` over enumerating many individual indices to save tokens.
 - `draftComments` is optional. Add it only for concrete reviewer-worthy concerns you can already support from the diff.
@@ -84,7 +100,7 @@ Default rules:
 
 If you need heavier guidance for grouping, description writing, or draft comment quality, then read [references/split.md](references/split.md).
 
-### 4. Split and verify
+### 5. Split and verify
 
 ```bash
 echo '<meta JSON>' | npx reviewdeck@latest split pr.diff -
@@ -100,7 +116,7 @@ This validates the metadata, generates sub-patches, and verifies that they compo
 
 If `split` fails, read the error, fix the metadata JSON, and retry.
 
-### 5. Hand off to human review
+### 6. Hand off to human review
 
 After `split` succeeds, the default next step is live review:
 
@@ -123,7 +139,7 @@ Default behavior:
 - Treat `comments` as the final human-approved payload.
 - Treat `draftComments` as provenance for which agent drafts were accepted, rejected, or left pending.
 
-### 6. Submit comments back to source
+### 7. Submit comments back to source
 
 After `render` completes:
 
