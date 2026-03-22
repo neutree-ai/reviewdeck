@@ -1,6 +1,6 @@
 {
   "name": "reviewdeck",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Split large PR diffs into reviewable sub-patches via indexed groups.",
   "repository": {
     "type": "git",
