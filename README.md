@@ -25,17 +25,17 @@ npm install -D reviewdeck
 The repo exposes a standard skill at `skills/reviewdeck`, so external users can install it with `npx skills add`:
 
 ```bash
-npx skills add <owner>/<repo> --agent codex --skill reviewdeck
+npx skills add neutree-ai/reviewdeck --skill reviewdeck
 ```
 
 Useful variants:
 
 ```bash
 # list skills in the repo first
-npx skills add <owner>/<repo> --list
+npx skills add neutree-ai/reviewdeck --list
 
 # install globally instead of into the current project
-npx skills add <owner>/<repo> --agent codex --skill reviewdeck --global
+npx skills add neutree-ai/reviewdeck --skill reviewdeck --global
 ```
 
 ## Review A PR
