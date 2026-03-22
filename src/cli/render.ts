@@ -53,53 +53,6 @@ async function resolveDistDir(): Promise<string> {
 }
 
 /**
- * Generate a self-contained HTML file with embedded patch data.
- * The app reads from window.__PATCHES__ instead of fetching from API.
- */
-export async function generateStaticHtml(subPatches: SubPatch[]): Promise<string> {
-  // Prefer inline build (single JS, no dynamic imports) for self-contained HTML
-  const candidates = [
-    resolve(import.meta.dirname, "web-inline"),
-    resolve(import.meta.dirname, "../../dist/web-inline"),
-  ];
-  const distDir = (await findDir(candidates)) ?? (await resolveDistDir());
-
-  // Read index.html
-  const indexHtml = await readFile(resolve(distDir, "index.html"), "utf-8");
-
-  // Find and inline CSS/JS references
-  const cssMatch = indexHtml.match(/href="(\/assets\/[^"]+\.css)"/);
-  const jsMatch = indexHtml.match(/src="(\/assets\/[^"]+\.js)"/);
-
-  let css = "";
-  let js = "";
-  if (cssMatch) {
-    css = await readFile(resolve(distDir, cssMatch[1]!.slice(1)), "utf-8");
-  }
-  if (jsMatch) {
-    js = await readFile(resolve(distDir, jsMatch[1]!.slice(1)), "utf-8");
-  }
-
-  // Build self-contained HTML
-  const dataScript = `<script>window.__PATCHES__=${JSON.stringify(subPatches)};</script>`;
-
-  return `<!doctype html>
-<html lang="en" class="dark">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Stacked Diff Review</title>
-<style>${css}</style>
-</head>
-<body>
-<div id="root"></div>
-${dataScript}
-<script type="module">${js}</script>
-</body>
-</html>`;
-}
-
-/**
  * Start the review server. Returns a promise that resolves with the final
  * review submission when the user submits the review.
  */

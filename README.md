@@ -58,12 +58,6 @@ The split metadata descriptions should read like reviewer-facing guideposts, not
 The split metadata can also include optional group-level `draftComments`, which render shows inline as agent co-review drafts for the human reviewer to accept or reject.
 When `render` submits, it prints a JSON object with final `comments` plus `draftComments` status so an agent can tell which drafts were accepted before deciding whether to post them back to a PR.
 
-If you want a single shareable HTML file instead of the live review server:
-
-```bash
-cat split.json | npx reviewdeck@latest split pr.diff - | npx reviewdeck@latest render - --html > review.html
-```
-
 ## Develop
 
 ```bash

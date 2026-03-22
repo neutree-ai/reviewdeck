@@ -64,7 +64,7 @@ If the command fails, read the error message, fix the metadata JSON, and retry.
 
 After `split` succeeds, the normal next step for PR review is `render`.
 Use it to open a human review UI for the generated sub-patches and collect comments.
-Default to the live render session. Only switch to `--html` when the user explicitly wants a static artifact, a file to share, or the environment clearly cannot support a live local review session.
+Default to the live render session.
 
 Launch a local diff review UI:
 
@@ -85,19 +85,13 @@ That object contains:
 Treat `comments` as the final human-approved payload.
 Treat `draftComments` as provenance that tells you which of your draft findings survived review.
 
-If the user wants a file instead of a live browser session, generate self-contained HTML:
-
-```bash
-echo '<meta JSON>' | npx reviewdeck@latest split pr.diff - | npx reviewdeck@latest render - --html > review.html
-```
-
 Treat the live `render` session as the default human review handoff.
 Prefer to actually launch it, wait for submission, and then continue the task with the returned submission JSON.
 
-When you finish this step without waiting for a live session, prefer an output like:
+When you finish this step without waiting for the live session to complete, prefer an output like:
 
 - the split completed successfully
-- where the review UI or HTML artifact is
+- where the review UI is
 - what the user should open next
 
 Do not immediately switch into autonomous bug-finding or produce review findings unless the user explicitly asks for your own review.

@@ -2,9 +2,9 @@
  * Unified CLI for reviewdeck.
  *
  * Usage:
- *   node --import tsx src/cli/main.ts index <patch> [-o <file>]
- *   node --import tsx src/cli/main.ts split <patch> <meta | -> [-o <dir>]
- *   node --import tsx src/cli/main.ts render [<dir> | -]
+ *   reviewdeck index <patch> [-o <file>]
+ *   reviewdeck split <patch> <meta | -> [-o <dir>]
+ *   reviewdeck render [<dir> | -]
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -67,15 +67,11 @@ function printUsage() {
       Use this after "split" when the goal is to let a person review the stack.
       It opens a browser and prints a submission JSON object to stdout.
 
-  reviewdeck render [<dir> | -] --html
-      Output a self-contained HTML artifact for human review instead of starting a server.
-
 Examples:
   gh pr diff 123 > pr.diff
   reviewdeck index pr.diff > pr.index.txt
   cat split.json | reviewdeck split pr.diff - -o output/
-  reviewdeck render output/
-  cat split.json | reviewdeck split pr.diff - | reviewdeck render - --html > review.html`);
+  reviewdeck render output/`);
 }
 
 function wantsHelp(args: string[]): boolean {
@@ -107,19 +103,16 @@ is to hand the proposed sub-patches to a human reviewer or collect comments.`);
 function printRenderUsage() {
   console.error(`Usage:
   reviewdeck render [<dir> | -] [-p <port>]
-  reviewdeck render [<dir> | -] --html
 
 Prepare generated sub-patches for human review.
 
 - Input can be a directory from "split -o" or stdin from "split"
 - Server mode opens a browser and waits for human review submission
 - Submission JSON includes final comments plus agent-draft accept/reject status
-- HTML mode emits a self-contained review file for sharing or manual review
 
 Examples:
   reviewdeck render output/
-  cat split.json | reviewdeck split pr.diff - | reviewdeck render -
-  cat split.json | reviewdeck split pr.diff - | reviewdeck render - --html > review.html`);
+  cat split.json | reviewdeck split pr.diff - | reviewdeck render -`);
 }
 
 // ---------------------------------------------------------------------------
@@ -331,17 +324,12 @@ async function cmdRender(args: string[]) {
     args,
     options: {
       port: { type: "string", short: "p" },
-      html: { type: "boolean" },
     },
     allowPositionals: true,
   });
 
-  const {
-    startReviewServer,
-    generateStaticHtml,
-    parseSubPatchesFromStdin,
-    parseSubPatchesFromDir,
-  } = await import("./render.ts");
+  const { startReviewServer, parseSubPatchesFromStdin, parseSubPatchesFromDir } =
+    await import("./render.ts");
 
   const source = positionals[0] ?? "-";
   let subPatches;
@@ -359,13 +347,6 @@ async function cmdRender(args: string[]) {
   }
 
   console.error(`Loaded ${subPatches.length} sub-patches for review.`);
-
-  // Static HTML mode: output self-contained file to stdout
-  if (values.html) {
-    const html = await generateStaticHtml(subPatches);
-    process.stdout.write(html);
-    return;
-  }
 
   const port = values.port ? parseInt(values.port, 10) : undefined;
   const submission = await startReviewServer(subPatches, { port });
