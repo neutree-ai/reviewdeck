@@ -25,6 +25,20 @@ npm run lint   # runs: vp test && vp check && knip && depcruise
 - **knip** — dead code / unused exports detection
 - **dependency-cruiser** — layer dependency rules (`.dependency-cruiser.cjs`)
 
+## Release
+
+Release flow is Git-based. Do not run `npm publish` locally for this repo.
+
+For a normal release:
+
+- bump the version in `package.json` and `package-lock.json`
+- run release checks locally, typically `npm test`, `npm run build`, and `npm run pack:dry-run`
+- commit the release changes
+- push the release commit to `main`
+- create and push a version tag such as `v0.2.4`
+
+Publishing to npm is handled by GitHub Actions after the tag is pushed.
+
 ## Architecture
 
 ```
