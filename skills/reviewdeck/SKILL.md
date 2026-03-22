@@ -78,6 +78,7 @@ Default rules:
 - Aim for 3-6 groups unless the PR is unusually small or large.
 - Order groups for review: peripheral first, core logic later, tests last.
 - `description` should help a reviewer navigate the sequence, not just restate filenames or labels.
+- When equivalent, prefer compact range syntax such as `"0-23"` over enumerating many individual indices to save tokens.
 - `draftComments` is optional. Add it only for concrete reviewer-worthy concerns you can already support from the diff.
 - Each draft comment must anchor to a `change` that belongs to the same group.
 
