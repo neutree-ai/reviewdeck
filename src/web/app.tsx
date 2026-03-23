@@ -20,6 +20,7 @@ import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
 import { Badge } from "./components/ui/badge";
 import { cn } from "./lib/utils";
+import { countCommentFlow } from "./comment-flow";
 import type {
   AgentDraftComment,
   AgentDraftCommentDecision,
@@ -208,31 +209,6 @@ function countDraftStatuses(draftComments: AgentDraftCommentDecision[]) {
   );
 }
 
-function countCommentFlow(
-  manualComments: Pick<ManualComment, "body">[],
-  draftComments: AgentDraftCommentDecision[],
-) {
-  return draftComments.reduce(
-    (acc, draft) => {
-      acc.total += 1;
-      if (draft.status === "accepted") {
-        acc.included += 1;
-      } else if (draft.status === "rejected") {
-        acc.omitted += 1;
-      } else {
-        acc.pending += 1;
-      }
-      return acc;
-    },
-    {
-      total: manualComments.length,
-      included: manualComments.length,
-      pending: 0,
-      omitted: 0,
-    },
-  );
-}
-
 function CommentStatusCard({
   title,
   counts,
@@ -244,11 +220,14 @@ function CommentStatusCard({
   compact?: boolean;
   minimal?: boolean;
 }) {
-  if (counts.total === 0) return null;
+  if (counts.totalDrafts === 0) return null;
 
-  const includedWidth = counts.total > 0 ? `${(counts.included / counts.total) * 100}%` : "0%";
-  const pendingWidth = counts.total > 0 ? `${(counts.pending / counts.total) * 100}%` : "0%";
-  const omittedWidth = counts.total > 0 ? `${(counts.omitted / counts.total) * 100}%` : "0%";
+  const includedWidth =
+    counts.totalDrafts > 0 ? `${(counts.included / counts.totalDrafts) * 100}%` : "0%";
+  const pendingWidth =
+    counts.totalDrafts > 0 ? `${(counts.pending / counts.totalDrafts) * 100}%` : "0%";
+  const omittedWidth =
+    counts.totalDrafts > 0 ? `${(counts.omitted / counts.totalDrafts) * 100}%` : "0%";
 
   if (compact) {
     return (
@@ -256,7 +235,7 @@ function CommentStatusCard({
         title={`${title}: ${counts.included} included, ${counts.pending} pending, ${counts.omitted} omitted`}
       >
         <div className="comment-progress-track overflow-hidden rounded-full">
-          {counts.total > 0 ? (
+          {counts.totalDrafts > 0 ? (
             <>
               {counts.included > 0 && (
                 <div
@@ -291,7 +270,7 @@ function CommentStatusCard({
         title={`${counts.included} included, ${counts.pending} pending, ${counts.omitted} omitted`}
       >
         <div className="comment-progress-track overflow-hidden rounded-full">
-          {counts.total > 0 ? (
+          {counts.totalDrafts > 0 ? (
             <>
               {counts.included > 0 && (
                 <div
@@ -339,11 +318,11 @@ function CommentStatusCard({
       <div className="flex items-center justify-between gap-3">
         <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{title}</span>
         <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground">
-          {counts.total} total
+          {counts.totalDrafts} drafts
         </span>
       </div>
       <div className="comment-progress-track mt-2 overflow-hidden rounded-full">
-        {counts.total > 0 ? (
+        {counts.totalDrafts > 0 ? (
           <>
             {counts.included > 0 && (
               <div
@@ -890,7 +869,7 @@ function App() {
           </div>
         </div>
 
-        {globalCommentCounts.total > 0 && (
+        {globalCommentCounts.totalDrafts > 0 && (
           <div className="px-3 pb-3">
             <div className="rounded-md border border-border/70 bg-background/60 p-3">
               <CommentStatusCard title="Whole review" counts={globalCommentCounts} minimal />
@@ -950,16 +929,19 @@ function App() {
                   </span>
                   {(subComments.length > 0 || subDraftComments.length > 0) && (
                     <span className="mt-1 inline-flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground/60">
-                      <span className="inline-flex items-center gap-1">
-                        <MessageSquare className="size-2.5" />
-                        {commentCounts.total}
-                      </span>
+                      {commentCounts.final > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <MessageSquare className="size-2.5" />
+                          {commentCounts.final}
+                        </span>
+                      )}
+                      {commentCounts.human > 0 && <span>{commentCounts.human} human</span>}
                       {commentCounts.included > 0 && <span>{commentCounts.included} included</span>}
                       {commentCounts.pending > 0 && <span>{commentCounts.pending} pending</span>}
                       {commentCounts.omitted > 0 && <span>{commentCounts.omitted} omitted</span>}
                     </span>
                   )}
-                  {isActive && activeCommentCounts.total > 0 && (
+                  {isActive && activeCommentCounts.totalDrafts > 0 && (
                     <div className="mt-3 rounded-md border border-border/60 bg-background/55 p-2.5">
                       <CommentStatusCard title="This patch" counts={activeCommentCounts} compact />
                     </div>
