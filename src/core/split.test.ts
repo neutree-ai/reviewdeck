@@ -85,14 +85,46 @@ describe("validateMeta", () => {
     expect(validateMeta(meta, 4)).toEqual([]);
   });
 
-  it("reports unassigned changes", () => {
+  it("collapses consecutive unassigned into a range", () => {
     const meta: SplitMeta = {
       groups: [{ description: "partial", changes: [0, 1] }],
     };
     const errors = validateMeta(meta, 4);
-    expect(errors.length).toBe(2);
-    expect(errors[0]).toContain("Change 2");
-    expect(errors[1]).toContain("Change 3");
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toContain("Change 2-3");
+  });
+
+  it("collapses non-consecutive unassigned into multiple ranges", () => {
+    // Assign 0, 2, 5 — leaves 1, 3-4, 6-9 unassigned
+    const meta: SplitMeta = {
+      groups: [{ description: "partial", changes: [0, 2, 5] }],
+    };
+    const errors = validateMeta(meta, 10);
+    expect(errors).toEqual([
+      "Change 1 is not assigned to any group",
+      "Change 3-4 is not assigned to any group",
+      "Change 6-9 is not assigned to any group",
+    ]);
+  });
+
+  it("shows single unassigned without range syntax", () => {
+    const meta: SplitMeta = {
+      groups: [{ description: "partial", changes: [0, 2] }],
+    };
+    const errors = validateMeta(meta, 3);
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toBe("Change 1 is not assigned to any group");
+  });
+
+  it("collapses consecutive duplicate assignments into a range", () => {
+    const meta: SplitMeta = {
+      groups: [
+        { description: "a", changes: ["0-5"] },
+        { description: "b", changes: ["3-8"] },
+      ],
+    };
+    const errors = validateMeta(meta, 9);
+    expect(errors.some((e) => e.includes("index 3-5 already assigned"))).toBe(true);
   });
 
   it("reports duplicate assignments", () => {

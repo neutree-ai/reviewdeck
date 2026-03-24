@@ -119,6 +119,25 @@ export function formatIndexedChanges(changes: IndexedChange[]): string {
 // Validation
 // ---------------------------------------------------------------------------
 
+/** Collapse sorted integers into compact range strings: [1,2,3,5,7,8] → ["1-3","5","7-8"] */
+function collapseRanges(nums: number[]): string[] {
+  if (nums.length === 0) return [];
+  const ranges: string[] = [];
+  let start = nums[0]!;
+  let end = start;
+  for (let i = 1; i < nums.length; i++) {
+    if (nums[i] === end + 1) {
+      end = nums[i]!;
+    } else {
+      ranges.push(start === end ? `${start}` : `${start}-${end}`);
+      start = nums[i]!;
+      end = start;
+    }
+  }
+  ranges.push(start === end ? `${start}` : `${start}-${end}`);
+  return ranges;
+}
+
 export function validateMeta(meta: SplitMeta, totalChanges: number): string[] {
   const errors: string[] = [];
   const assigned = new Set<number>();
@@ -135,14 +154,26 @@ export function validateMeta(meta: SplitMeta, totalChanges: number): string[] {
       errors.push(`Group ${g + 1}: ${e.message}`);
       continue;
     }
+    const outOfRange: number[] = [];
+    const duplicates: number[] = [];
     for (const idx of expanded) {
       if (idx < 0 || idx >= totalChanges) {
-        errors.push(`Group ${g + 1}: index ${idx} out of range [0, ${totalChanges - 1}]`);
+        outOfRange.push(idx);
       }
       if (assigned.has(idx)) {
-        errors.push(`Group ${g + 1}: index ${idx} already assigned to another group`);
+        duplicates.push(idx);
       }
       assigned.add(idx);
+    }
+    if (outOfRange.length > 0) {
+      for (const range of collapseRanges(outOfRange)) {
+        errors.push(`Group ${g + 1}: index ${range} out of range [0, ${totalChanges - 1}]`);
+      }
+    }
+    if (duplicates.length > 0) {
+      for (const range of collapseRanges(duplicates)) {
+        errors.push(`Group ${g + 1}: index ${range} already assigned to another group`);
+      }
     }
 
     const groupChanges = new Set(expanded);
@@ -165,9 +196,13 @@ export function validateMeta(meta: SplitMeta, totalChanges: number): string[] {
     }
   }
 
+  const unassigned: number[] = [];
   for (let i = 0; i < totalChanges; i++) {
-    if (!assigned.has(i)) {
-      errors.push(`Change ${i} is not assigned to any group`);
+    if (!assigned.has(i)) unassigned.push(i);
+  }
+  if (unassigned.length > 0) {
+    for (const range of collapseRanges(unassigned)) {
+      errors.push(`Change ${range} is not assigned to any group`);
     }
   }
 

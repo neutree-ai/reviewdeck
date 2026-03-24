@@ -21,11 +21,10 @@ function makeDraft(
 
 describe("countCommentFlow", () => {
   it("tracks draft triage separately from human comments", () => {
-    const counts = countCommentFlow([{ body: "human-1" }, { body: "human-2" }], [
-      makeDraft("d1", "accepted"),
-      makeDraft("d2", "pending"),
-      makeDraft("d3", "rejected"),
-    ]);
+    const counts = countCommentFlow(
+      [{ body: "human-1" }, { body: "human-2" }],
+      [makeDraft("d1", "accepted"), makeDraft("d2", "pending"), makeDraft("d3", "rejected")],
+    );
 
     expect(counts).toEqual({
       totalDrafts: 3,
