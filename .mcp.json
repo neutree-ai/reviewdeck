@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "reviewdeck": {
+      "type": "http",
+      "url": "http://localhost:3847/mcp",
+      "headers": {
+        "Authorization": "Bearer ${REVIEWDECK_SECRET}",
+        "x-id": "claude-agent"
+      }
+    }
+  }
+}

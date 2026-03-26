@@ -1,6 +1,7 @@
 {
   "entry": [
     "src/cli/main.ts",
+    "src/server/main.ts",
     "src/web/app.tsx",
     "src/web/vite.config.ts",
     "src/web/vite.config.inline.ts"

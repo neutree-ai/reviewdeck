@@ -44,15 +44,17 @@ Publishing to npm is handled by GitHub Actions after the tag is pushed.
 ```
 L0  src/core/       Pure computation — zero I/O, zero external deps
 L1  src/cli/        CLI entry point — file I/O, git, process control
-L2  src/web/        Web UI + API server (future)
+L1  src/server/     Persistent HTTP review service — MCP, sessions, REST API
+L2  src/web/        Web UI — React SPA served by cli (render) or server
     skills/         Published agent skills for `npx skills add`
 ```
 
 ### Dependency rules (enforced by dependency-cruiser)
 
-- `core` must not import from `cli` or `web`
-- `cli` must not import from `web`
-- `web` may import from `core`, not from `cli`
+- `core` must not import from `cli`, `server`, or `web`
+- `cli` must not import from `server` or `web`
+- `server` must not import from `cli` or `web`
+- `web` must not import from `cli` or `server`
 
 ## Testing
 

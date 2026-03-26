@@ -21,6 +21,7 @@ import { Textarea } from "./components/ui/textarea";
 import { Badge } from "./components/ui/badge";
 import { cn } from "./lib/utils";
 import { countCommentFlow } from "./comment-flow";
+import { fetchPatches, submitReview } from "./api";
 import type {
   AgentDraftComment,
   AgentDraftCommentDecision,
@@ -43,22 +44,6 @@ type AnnotationMeta =
   | { kind: "comment"; comment: ManualComment; commentIndex: number }
   | { kind: "draft"; draft: AgentDraftCommentDecision }
   | { kind: "pending" };
-
-async function fetchPatches(): Promise<SubPatch[]> {
-  if ((window as { __PATCHES__?: SubPatch[] }).__PATCHES__) {
-    return (window as { __PATCHES__: SubPatch[] }).__PATCHES__;
-  }
-  const res = await fetch("/api/patches");
-  return res.json();
-}
-
-async function submitReview(submission: ReviewSubmission): Promise<void> {
-  await fetch("/api/submit", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(submission),
-  });
-}
 
 function InlineCommentForm({
   onSubmit,
