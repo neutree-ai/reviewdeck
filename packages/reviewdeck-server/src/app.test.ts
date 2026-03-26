@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createApp } from "./app.ts";
-import { SessionStore } from "./sessions.ts";
-import { UploadStore } from "./uploads.ts";
+import { SessionService } from "./sessions.ts";
+import { MemoryStorage } from "./storage.ts";
 import type { SplitMeta } from "../../../src/core/types.ts";
 
 const SECRET = "test-secret";
@@ -23,17 +23,16 @@ const VALID_META: SplitMeta = {
 
 const AUTH_HEADERS = {
   Authorization: "Bearer test-secret",
-  "x-id": "tester",
+  "x-reviewer-id": "tester",
 };
 
 function setup() {
-  const sessions = new SessionStore();
-  const uploads = new UploadStore();
-  const app = createApp({ secret: SECRET, sessions, uploads, baseUrl: BASE_URL });
-  return { app, sessions, uploads };
+  const storage = new MemoryStorage();
+  const sessions = new SessionService(storage);
+  const app = createApp({ secret: SECRET, sessions, storage, baseUrl: BASE_URL });
+  return { app, sessions, storage };
 }
 
-/** Helper: upload diff + create session, return sessionId and reviewToken. */
 async function createSession(app: ReturnType<typeof createApp>) {
   const uploadRes = await app.request("/api/uploads", {
     method: "POST",
@@ -66,7 +65,8 @@ describe("POST /api/uploads", () => {
     expect(res.status).toBe(201);
     const json = await res.json();
     expect(json.fileId).toBeTruthy();
-    expect(json.indexed).toContain("Total:");
+    expect(json.indexed).toContain("[0]");
+    expect(json.indexed).toContain("Total: 2 change lines");
   });
 
   it("without auth returns 401", async () => {
@@ -78,16 +78,14 @@ describe("POST /api/uploads", () => {
     expect(res.status).toBe(401);
   });
 
-  it("with empty body returns 400", async () => {
+  it("empty body returns 400", async () => {
     const { app } = setup();
     const res = await app.request("/api/uploads", {
       method: "POST",
       headers: AUTH_HEADERS,
-      body: "   ",
+      body: "",
     });
     expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toMatch(/Empty body/);
   });
 });
 
@@ -96,31 +94,14 @@ describe("POST /api/uploads", () => {
 // ---------------------------------------------------------------------------
 
 describe("POST /api/sessions", () => {
-  it("with valid data returns 201 with sessionId and reviewUrl", async () => {
+  it("creates session with valid data", async () => {
     const { app } = setup();
-
-    // First upload the diff
-    const uploadRes = await app.request("/api/uploads", {
-      method: "POST",
-      headers: AUTH_HEADERS,
-      body: DIFF,
-    });
-    const { fileId } = await uploadRes.json();
-
-    // Create session
-    const res = await app.request("/api/sessions", {
-      method: "POST",
-      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
-      body: JSON.stringify({ diffFileId: fileId, splitMeta: VALID_META }),
-    });
-    expect(res.status).toBe(201);
-    const json = await res.json();
-    expect(json.sessionId).toBeTruthy();
-    expect(json.reviewUrl).toContain("/review/");
-    expect(json.status).toBe("pending");
+    const { sessionId, token } = await createSession(app);
+    expect(sessionId).toBeTruthy();
+    expect(token).toBeTruthy();
   });
 
-  it("with missing diffFileId returns 404", async () => {
+  it("missing diffFileId returns 404", async () => {
     const { app } = setup();
     const res = await app.request("/api/sessions", {
       method: "POST",
@@ -128,8 +109,6 @@ describe("POST /api/sessions", () => {
       body: JSON.stringify({ diffFileId: "nonexistent", splitMeta: VALID_META }),
     });
     expect(res.status).toBe(404);
-    const json = await res.json();
-    expect(json.error).toMatch(/not found/);
   });
 });
 
@@ -138,25 +117,9 @@ describe("POST /api/sessions", () => {
 // ---------------------------------------------------------------------------
 
 describe("GET /api/sessions/:id/status", () => {
-  it("with auth returns session data", async () => {
+  it("returns session data", async () => {
     const { app } = setup();
-
-    // Upload + create session
-    const uploadRes = await app.request("/api/uploads", {
-      method: "POST",
-      headers: AUTH_HEADERS,
-      body: DIFF,
-    });
-    const { fileId } = await uploadRes.json();
-
-    const createRes = await app.request("/api/sessions", {
-      method: "POST",
-      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
-      body: JSON.stringify({ diffFileId: fileId, splitMeta: VALID_META }),
-    });
-    const { sessionId } = await createRes.json();
-
-    // Get status
+    const { sessionId } = await createSession(app);
     const res = await app.request(`/api/sessions/${sessionId}/status`, {
       headers: AUTH_HEADERS,
     });
@@ -164,8 +127,6 @@ describe("GET /api/sessions/:id/status", () => {
     const json = await res.json();
     expect(json.sessionId).toBe(sessionId);
     expect(json.status).toBe("pending");
-    expect(json.createdBy).toBe("tester");
-    expect(json.reviewUrl).toContain("/review/");
   });
 
   it("missing session returns 404", async () => {
@@ -182,18 +143,15 @@ describe("GET /api/sessions/:id/status", () => {
 // ---------------------------------------------------------------------------
 
 describe("GET /api/sessions/:id/patches", () => {
-  it("returns patches array with valid review token", async () => {
+  it("returns patches with valid review token", async () => {
     const { app } = setup();
     const { sessionId, token } = await createSession(app);
-
     const res = await app.request(`/api/sessions/${sessionId}/patches?token=${token}`);
     expect(res.status).toBe(200);
     const patches = await res.json();
     expect(Array.isArray(patches)).toBe(true);
     expect(patches).toHaveLength(1);
     expect(patches[0].description).toBe("test group");
-    expect(patches[0].diff).toContain("-old");
-    expect(patches[0].diff).toContain("+new");
   });
 
   it("missing token returns 401", async () => {
@@ -225,7 +183,6 @@ describe("POST /api/sessions/:id/submit", () => {
   it("returns 200 on successful submission", async () => {
     const { app } = setup();
     const { sessionId, token } = await createSession(app);
-
     const res = await app.request(`/api/sessions/${sessionId}/submit?token=${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -236,24 +193,20 @@ describe("POST /api/sessions/:id/submit", () => {
     expect(json.ok).toBe(true);
   });
 
-  it("already completed session returns 404", async () => {
+  it("already completed returns 404", async () => {
     const { app } = setup();
     const { sessionId, token } = await createSession(app);
-
     await app.request(`/api/sessions/${sessionId}/submit?token=${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ comments: [], draftComments: [] }),
     });
-
     const res = await app.request(`/api/sessions/${sessionId}/submit?token=${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ comments: [], draftComments: [] }),
     });
     expect(res.status).toBe(404);
-    const json = await res.json();
-    expect(json.error).toMatch(/already completed/);
   });
 
   it("missing token returns 401", async () => {

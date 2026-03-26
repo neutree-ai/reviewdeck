@@ -6,6 +6,7 @@
  *
  * Environment:
  *   REVIEWDECK_SECRET  — shared secret for API/MCP auth (required)
+ *   DATABASE_URL       — postgres connection URL (optional, uses memory storage if absent)
  *   PORT               — listen port (default 3847, overridden by --port)
  *   HOST               — bind address (default 0.0.0.0, overridden by --host)
  */
@@ -14,8 +15,8 @@ import type { Hono } from "hono";
 import { parseArgs } from "node:util";
 import { serve } from "@hono/node-server";
 import { createApp, type AppOptions } from "./app.ts";
-import { SessionStore } from "./sessions.ts";
-import { UploadStore } from "./uploads.ts";
+import { SessionService } from "./sessions.ts";
+import { MemoryStorage, type Storage } from "./storage.ts";
 
 const { values } = parseArgs({
   options: {
@@ -35,23 +36,33 @@ if (!secret) {
 const port = parseInt(values.port ?? process.env.PORT ?? "3847", 10);
 const host = values.host ?? process.env.HOST ?? "0.0.0.0";
 
-const sessions = new SessionStore();
-const uploads = new UploadStore();
-sessions.start();
-uploads.start();
+// Storage: postgres if DATABASE_URL is set, otherwise in-memory
+let storage: Storage;
+const databaseUrl = process.env.DATABASE_URL;
+if (databaseUrl) {
+  const { PostgresStorage } = await import("./postgres.ts");
+  storage = new PostgresStorage(databaseUrl);
+  await (storage as any).init();
+  console.error("Using PostgreSQL storage.");
+} else {
+  storage = new MemoryStorage();
+  console.error("Using in-memory storage (no DATABASE_URL).");
+}
+
+const sessions = new SessionService(storage);
 
 const baseUrl = `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
 
-// MCP router (optional — graceful fallback if SDK not installed)
+// MCP router (optional)
 let mcpRouter: Hono | undefined;
 try {
   const { createMcpRouter } = await import("./mcp.ts");
-  mcpRouter = createMcpRouter(sessions, uploads, baseUrl);
+  mcpRouter = createMcpRouter(sessions, storage, baseUrl);
 } catch {
   console.error("MCP support not available (SDK not installed). Running without MCP.");
 }
 
-const appOpts: AppOptions = { secret, sessions, uploads, baseUrl, mcpRouter };
+const appOpts: AppOptions = { secret, sessions, storage, baseUrl, mcpRouter };
 const app = createApp(appOpts);
 
 const server = serve({ fetch: app.fetch, port, hostname: host }, () => {
@@ -60,12 +71,11 @@ const server = serve({ fetch: app.fetch, port, hostname: host }, () => {
   console.error(`Review UI: ${baseUrl}/review/<session-id>`);
 });
 
-// Graceful shutdown
 function shutdown() {
   console.error("\nShutting down...");
-  sessions.stop();
-  uploads.stop();
-  server.close(() => process.exit(0));
+  storage.close().then(() => {
+    server.close(() => process.exit(0));
+  });
   setTimeout(() => process.exit(1), 5000).unref();
 }
 

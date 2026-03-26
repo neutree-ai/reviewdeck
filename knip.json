@@ -5,16 +5,9 @@
     "packages/reviewdeck/src/main.ts",
     "packages/reviewdeck-server/src/main.ts"
   ],
-  "project": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "packages/*/src/**/*.ts"
-  ],
+  "project": ["src/**/*.ts", "src/**/*.tsx", "packages/*/src/**/*.ts"],
   "vitest": {
-    "entry": [
-      "src/**/*.test.ts",
-      "packages/*/src/**/*.test.ts"
-    ]
+    "entry": ["src/**/*.test.ts", "packages/*/src/**/*.test.ts"]
   },
   "ignoreDependencies": ["vitest", "vite", "tailwindcss"],
   "ignoreExportsUsedInFile": true

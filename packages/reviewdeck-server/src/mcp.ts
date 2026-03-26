@@ -8,21 +8,17 @@
  */
 
 import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPTransport } from "@hono/mcp";
 import { z } from "zod";
 import { parsePatch } from "../../../src/core/patch.ts";
 import { indexChanges, formatIndexedChanges } from "../../../src/core/split.ts";
-import type { SessionStore } from "./sessions.ts";
-import type { UploadStore } from "./uploads.ts";
+import type { SessionService } from "./sessions.ts";
+import type { Storage } from "./storage.ts";
 
-/**
- * Create a fresh McpServer instance with all tools registered.
- * Each MCP client session gets its own instance because McpServer
- * can only be connected to one transport at a time.
- */
-function createMcpServer(sessions: SessionStore, uploads: UploadStore, baseUrl: string): McpServer {
+function createMcpServer(sessions: SessionService, storage: Storage, baseUrl: string): McpServer {
   const server = new McpServer({
     name: "reviewdeck",
     version: "0.1.0",
@@ -52,7 +48,12 @@ function createMcpServer(sessions: SessionStore, uploads: UploadStore, baseUrl: 
           isError: true,
         };
       }
-      const fileId = uploads.add(content, "mcp-agent");
+      const fileId = randomUUID();
+      await storage.saveUpload(fileId, {
+        content,
+        createdBy: "mcp-agent",
+        createdAt: Date.now(),
+      });
       const patches = parsePatch(content);
       const changes = indexChanges(patches);
       const formatted = formatIndexedChanges(changes);
@@ -93,7 +94,7 @@ function createMcpServer(sessions: SessionStore, uploads: UploadStore, baseUrl: 
         .describe("Split metadata with groups"),
     },
     async (params) => {
-      const upload = uploads.get(params.diffFileId);
+      const upload = await storage.getUpload(params.diffFileId);
       if (!upload) {
         return {
           content: [
@@ -108,13 +109,13 @@ function createMcpServer(sessions: SessionStore, uploads: UploadStore, baseUrl: 
         };
       }
       try {
-        const session = sessions.create({
+        const session = await sessions.create({
           diffContent: upload.content,
           splitMeta: params.splitMeta as any,
           createdBy: "mcp-agent",
           baseUrl,
         });
-        uploads.delete(params.diffFileId);
+        await storage.deleteUpload(params.diffFileId);
         return {
           content: [
             {
@@ -143,7 +144,7 @@ function createMcpServer(sessions: SessionStore, uploads: UploadStore, baseUrl: 
       sessionId: z.string().describe("Session ID returned by create_review"),
     },
     async (params) => {
-      const session = sessions.get(params.sessionId);
+      const session = await sessions.get(params.sessionId);
       if (!session) {
         return {
           content: [{ type: "text", text: JSON.stringify({ error: "Session not found" }) }],
@@ -159,7 +160,6 @@ function createMcpServer(sessions: SessionStore, uploads: UploadStore, baseUrl: 
               status: session.status,
               createdAt: session.createdAt,
               reviewUrl: session.reviewUrl,
-              completedAt: session.completedAt ?? null,
               submission: session.submission ?? null,
             }),
           },
@@ -171,27 +171,21 @@ function createMcpServer(sessions: SessionStore, uploads: UploadStore, baseUrl: 
   return server;
 }
 
-export function createMcpRouter(
-  sessions: SessionStore,
-  uploads: UploadStore,
-  baseUrl: string,
-): Hono {
+export function createMcpRouter(sessions: SessionService, storage: Storage, baseUrl: string): Hono {
   const router = new Hono();
   const transports = new Map<string, StreamableHTTPTransport>();
 
   router.all("/", async (c) => {
     const sessionId = c.req.header("mcp-session-id");
 
-    // Existing session — reuse transport
     if (sessionId && transports.has(sessionId)) {
       const response = await transports.get(sessionId)!.handleRequest(c);
       if (c.req.method === "DELETE") transports.delete(sessionId);
       return response;
     }
 
-    // New session (POST only)
     if (c.req.method === "POST") {
-      const mcpServer = createMcpServer(sessions, uploads, baseUrl);
+      const mcpServer = createMcpServer(sessions, storage, baseUrl);
       const transport = new StreamableHTTPTransport({
         sessionIdGenerator: () => crypto.randomUUID(),
       });

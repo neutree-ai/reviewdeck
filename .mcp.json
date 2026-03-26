@@ -5,7 +5,7 @@
       "url": "http://localhost:3847/mcp",
       "headers": {
         "Authorization": "Bearer ${REVIEWDECK_SECRET}",
-        "x-id": "claude-agent"
+        "x-reviewer-id": "claude-agent"
       }
     }
   }

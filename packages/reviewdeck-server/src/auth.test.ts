@@ -7,7 +7,7 @@ describe("authenticateHeaders", () => {
   it("valid bearer token with x-id", () => {
     const headers = new Headers({
       authorization: "Bearer test-secret",
-      "x-id": "alice",
+      "x-reviewer-id": "alice",
     });
     const result = authenticateHeaders(headers, SECRET);
     expect(result).toEqual({ ok: true, id: "alice" });

@@ -1,12 +1,13 @@
 import type { Hono as HonoType } from "hono";
 import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { randomUUID } from "node:crypto";
 import { parsePatch } from "../../../src/core/patch.ts";
 import { indexChanges, formatIndexedChanges } from "../../../src/core/split.ts";
 import type { SplitMeta } from "../../../src/core/types.ts";
 import { authenticateHeaders } from "./auth.ts";
-import type { SessionStore } from "./sessions.ts";
-import type { UploadStore } from "./uploads.ts";
+import type { SessionService } from "./sessions.ts";
+import type { Storage } from "./storage.ts";
 
 // ---------------------------------------------------------------------------
 // Auth middleware
@@ -27,14 +28,14 @@ function requireAuth(secret: string) {
 
 export interface AppOptions {
   secret: string;
-  sessions: SessionStore;
-  uploads: UploadStore;
+  sessions: SessionService;
+  storage: Storage;
   baseUrl: string;
   mcpRouter?: HonoType;
 }
 
 export function createApp(opts: AppOptions) {
-  const { secret, sessions, uploads } = opts;
+  const { secret, sessions, storage } = opts;
 
   const app = new Hono();
   const authed = new Hono();
@@ -53,7 +54,8 @@ export function createApp(opts: AppOptions) {
     const body = await c.req.text();
     if (!body.trim()) return c.json({ error: "Empty body" }, 400);
     const callerId = c.get("callerId") as string;
-    const fileId = uploads.add(body, callerId);
+    const fileId = randomUUID();
+    await storage.saveUpload(fileId, { content: body, createdBy: callerId, createdAt: Date.now() });
     const patches = parsePatch(body);
     const changes = indexChanges(patches);
     const indexed = formatIndexedChanges(changes);
@@ -66,17 +68,17 @@ export function createApp(opts: AppOptions) {
   // Create session
   authed.post("/api/sessions", async (c) => {
     const parsed = await c.req.json<{ diffFileId: string; splitMeta: SplitMeta }>();
-    const upload = uploads.get(parsed.diffFileId);
+    const upload = await storage.getUpload(parsed.diffFileId);
     if (!upload) return c.json({ error: "Diff file not found" }, 404);
     const callerId = c.get("callerId") as string;
     try {
-      const session = sessions.create({
+      const session = await sessions.create({
         diffContent: upload.content,
         splitMeta: parsed.splitMeta,
         createdBy: callerId,
         baseUrl: opts.baseUrl,
       });
-      uploads.delete(parsed.diffFileId);
+      await storage.deleteUpload(parsed.diffFileId);
       return c.json(
         { sessionId: session.id, reviewUrl: session.reviewUrl, status: session.status },
         201,
@@ -87,8 +89,8 @@ export function createApp(opts: AppOptions) {
   });
 
   // Get session status
-  authed.get("/api/sessions/:id/status", (c) => {
-    const session = sessions.get(c.req.param("id"));
+  authed.get("/api/sessions/:id/status", async (c) => {
+    const session = await sessions.get(c.req.param("id"));
     if (!session) return c.json({ error: "Session not found" }, 404);
     return c.json({
       sessionId: session.id,
@@ -96,7 +98,6 @@ export function createApp(opts: AppOptions) {
       createdAt: session.createdAt,
       createdBy: session.createdBy,
       reviewUrl: session.reviewUrl,
-      completedAt: session.completedAt ?? null,
       submission: session.submission ?? null,
     });
   });
@@ -106,17 +107,17 @@ export function createApp(opts: AppOptions) {
   const requireReviewToken = async (c: any, next: any) => {
     const id = c.req.param("id");
     const token = c.req.query("token");
-    if (!token || !sessions.verifyReviewToken(id, token)) {
+    if (!token || !(await sessions.verifyReviewToken(id, token))) {
       return c.json({ error: "Invalid or missing review token" }, 401);
     }
     await next();
   };
 
-  app.get("/api/sessions/:id/patches", requireReviewToken, (c) => {
+  app.get("/api/sessions/:id/patches", requireReviewToken, async (c) => {
     const id = c.req.param("id");
-    const session = sessions.markReviewing(id);
+    const session = await sessions.markReviewing(id);
     if (!session) {
-      const existing = sessions.get(id);
+      const existing = await sessions.get(id);
       if (!existing) return c.json({ error: "Session not found" }, 404);
       return c.json(existing.subPatches);
     }
@@ -125,7 +126,7 @@ export function createApp(opts: AppOptions) {
 
   app.post("/api/sessions/:id/submit", requireReviewToken, async (c) => {
     const submission = await c.req.json();
-    const session = sessions.submit(c.req.param("id"), submission);
+    const session = await sessions.submit(c.req.param("id"), submission);
     if (!session) return c.json({ error: "Session not found or already completed" }, 404);
     return c.json({ ok: true });
   });

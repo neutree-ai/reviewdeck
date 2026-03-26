@@ -9,5 +9,5 @@ export function authenticateHeaders(headers: Headers, secret: string): AuthResul
   if (authHeader.slice(7) !== secret) {
     return { ok: false, id: "", error: "Invalid token" };
   }
-  return { ok: true, id: headers.get("x-id") ?? "anonymous" };
+  return { ok: true, id: headers.get("x-reviewer-id") ?? "anonymous" };
 }

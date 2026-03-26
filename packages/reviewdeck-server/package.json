@@ -20,7 +20,7 @@
   ],
   "type": "module",
   "scripts": {
-    "build:server": "esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/reviewdeck-server.mjs --banner:js='#!/usr/bin/env node' --external:@modelcontextprotocol/sdk",
+    "build:server": "esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/reviewdeck-server.mjs --banner:js='#!/usr/bin/env node' --external:@modelcontextprotocol/sdk --external:postgres",
     "build:web": "cp -r ../../dist/web dist/web",
     "build": "npm run build:server && npm run build:web"
   },
@@ -29,6 +29,7 @@
     "@hono/node-server": "^1.19.11",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "hono": "^4.12.9",
+    "postgres": "^3.4.8",
     "zod": "^4.3.6"
   },
   "engines": {
