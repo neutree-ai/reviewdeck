@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SessionStore } from "./sessions.ts";
-import type { SplitMeta } from "../core/types.ts";
+import type { SplitMeta } from "../../../src/core/types.ts";
 
 const DIFF = `diff --git a/file.txt b/file.txt
 --- a/file.txt

@@ -1,14 +1,20 @@
 {
   "entry": [
-    "src/cli/main.ts",
-    "src/server/main.ts",
     "src/web/app.tsx",
     "src/web/vite.config.ts",
-    "src/web/vite.config.inline.ts"
+    "packages/reviewdeck/src/main.ts",
+    "packages/reviewdeck-server/src/main.ts"
   ],
-  "project": ["src/**/*.ts", "src/**/*.tsx"],
+  "project": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "packages/*/src/**/*.ts"
+  ],
   "vitest": {
-    "entry": ["src/**/*.test.ts"]
+    "entry": [
+      "src/**/*.test.ts",
+      "packages/*/src/**/*.test.ts"
+    ]
   },
   "ignoreDependencies": ["vitest", "vite", "tailwindcss"],
   "ignoreExportsUsedInFile": true

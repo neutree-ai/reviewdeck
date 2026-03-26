@@ -1,52 +1,27 @@
 {
-  "name": "reviewdeck",
-  "version": "0.2.6",
-  "description": "Split large PR diffs into reviewable sub-patches via indexed groups.",
-  "homepage": "https://github.com/neutree-ai/reviewdeck",
-  "bugs": {
-    "url": "https://github.com/neutree-ai/reviewdeck/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/neutree-ai/reviewdeck.git"
-  },
-  "bin": {
-    "reviewdeck": "dist/reviewdeck.mjs"
-  },
-  "files": [
-    "dist/reviewdeck.mjs",
-    "dist/web",
-    "skills/reviewdeck",
-    "README.md"
+  "private": true,
+  "workspaces": [
+    "packages/*"
   ],
   "type": "module",
   "scripts": {
     "test": "vp test",
     "check": "vp check",
-    "check-deps": "depcruise src --config .dependency-cruiser.cjs",
+    "check-deps": "depcruise src packages/*/src --config .dependency-cruiser.cjs",
     "knip": "knip",
-    "build:cli": "esbuild src/cli/main.ts --bundle --platform=node --format=esm --outfile=dist/reviewdeck.mjs --banner:js='#!/usr/bin/env node'",
-    "build:server": "esbuild src/server/main.ts --bundle --platform=node --format=esm --outfile=dist/reviewdeck-server.mjs --banner:js='#!/usr/bin/env node' --external:@modelcontextprotocol/sdk",
     "build:web": "vp build -c src/web/vite.config.ts",
-    "build": "npm run build:cli && npm run build:server && npm run build:web",
-    "lint": "vp test && vp check && knip && depcruise src --config .dependency-cruiser.cjs",
-    "pack:dry-run": "npm pack --dry-run",
-    "prepack": "npm run build",
+    "build": "npm run build:web && npm run build --workspaces",
+    "lint": "vp test && vp check && knip && npm run check-deps",
     "prepare": "vp config"
   },
   "dependencies": {
-    "@hono/mcp": "^0.2.4",
-    "@hono/node-server": "^1.19.11",
-    "@modelcontextprotocol/sdk": "^1.27.1",
     "@pierre/diffs": "^1.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "hono": "^4.12.9",
     "lucide-react": "^0.577.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "tailwind-merge": "^3.5.0",
-    "zod": "^4.3.6"
+    "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.1",

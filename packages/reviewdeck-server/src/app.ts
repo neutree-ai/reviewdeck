@@ -1,9 +1,9 @@
 import type { Hono as HonoType } from "hono";
 import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { parsePatch } from "../core/patch.ts";
-import { indexChanges, formatIndexedChanges } from "../core/split.ts";
-import type { SplitMeta } from "../core/types.ts";
+import { parsePatch } from "../../../src/core/patch.ts";
+import { indexChanges, formatIndexedChanges } from "../../../src/core/split.ts";
+import type { SplitMeta } from "../../../src/core/types.ts";
 import { authenticateHeaders } from "./auth.ts";
 import type { SessionStore } from "./sessions.ts";
 import type { UploadStore } from "./uploads.ts";

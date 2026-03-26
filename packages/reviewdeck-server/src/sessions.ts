@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { parsePatch } from "../core/patch.ts";
+import { parsePatch } from "../../../src/core/patch.ts";
 import {
   indexChanges,
   validateMeta,
   generateSubPatches,
   resolveSplitGroupMeta,
-} from "../core/split.ts";
-import type { SplitMeta } from "../core/types.ts";
+} from "../../../src/core/split.ts";
+import type { SplitMeta } from "../../../src/core/types.ts";
 import type { Session, SubPatch } from "./types.ts";
 
 const DEFAULT_TTL = 2 * 60 * 60 * 1000; // 2 hours

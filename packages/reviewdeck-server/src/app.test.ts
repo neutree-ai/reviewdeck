@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app.ts";
 import { SessionStore } from "./sessions.ts";
 import { UploadStore } from "./uploads.ts";
-import type { SplitMeta } from "../core/types.ts";
+import type { SplitMeta } from "../../../src/core/types.ts";
 
 const SECRET = "test-secret";
 const BASE_URL = "http://localhost:3000";

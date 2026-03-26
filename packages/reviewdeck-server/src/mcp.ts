@@ -12,8 +12,8 @@ import { Hono } from "hono";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPTransport } from "@hono/mcp";
 import { z } from "zod";
-import { parsePatch } from "../core/patch.ts";
-import { indexChanges, formatIndexedChanges } from "../core/split.ts";
+import { parsePatch } from "../../../src/core/patch.ts";
+import { indexChanges, formatIndexedChanges } from "../../../src/core/split.ts";
 import type { SessionStore } from "./sessions.ts";
 import type { UploadStore } from "./uploads.ts";
 

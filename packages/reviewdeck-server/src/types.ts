@@ -1,4 +1,4 @@
-import type { AgentDraftComment, ReviewSubmission, SplitMeta } from "../core/types.ts";
+import type { AgentDraftComment, ReviewSubmission, SplitMeta } from "../../../src/core/types.ts";
 
 export interface SubPatch {
   index: number;
