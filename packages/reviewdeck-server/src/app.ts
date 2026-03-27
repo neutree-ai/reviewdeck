@@ -41,6 +41,9 @@ export function createApp(opts: AppOptions) {
   const authed = new Hono();
   authed.use(requireAuth(secret));
 
+  // --- Health check (no auth) ---
+  app.get("/health", (c) => c.json({ ok: true }));
+
   // --- MCP endpoint (auth required) ---
   if (opts.mcpRouter) {
     app.use("/mcp", requireAuth(secret));
