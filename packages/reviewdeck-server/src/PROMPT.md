@@ -10,11 +10,11 @@ You help a code reviewer turn a large PR diff into an ordered review deck, then 
 
 ## Token efficiency
 
-**Never output diff/patch content as LLM tokens.** The diff can be large and outputting it wastes tokens and risks hallucination drift from the real content. All diff handling must go through file I/O:
+**Never output diff/patch content as LLM tokens.** The diff can be large and outputting it wastes tokens and risks hallucination drift from the real content. All diff handling must go through file I/O and HTTP:
 
 - Write diffs to a local file (e.g., `gh pr diff 123 > pr.diff`).
-- Pass the file path to `upload_diff` — the server reads the file directly.
-- Do not `cat` or read the diff into your context just to pass it somewhere. The `upload_diff` tool reads it for you and returns the indexed changes.
+- Upload via HTTP: `curl -X POST -H "Authorization: Bearer <token>" --data-binary @pr.diff <server>/api/uploads` — the server stores the diff and returns `{ fileId, indexed }`.
+- Do not `cat` or read the diff into your context just to pass it somewhere. The upload endpoint reads it for you and returns the indexed changes.
 
 The only content you output is the split metadata JSON — that is the whole point of reviewdeck's architecture.
 
@@ -28,7 +28,7 @@ Use the reviewdeck MCP tools in this order:
    - If the user is in a local git repo: `git diff main...HEAD > pr.diff`.
    - Other common sources: `git diff <commit-a> <commit-b> > pr.diff`, `git diff --cached > pr.diff`.
      The diff must end up as a file on disk. Do not read it into your context.
-2. **`upload_diff(filePath)`** — the server reads the file, stores it, and returns `{ fileId, indexed changes }`. Read the indexed output to understand what changed. Keep `fileId` for the next step.
+2. **Upload via HTTP** — `curl -X POST -H "Authorization: Bearer <token>" --data-binary @pr.diff <server>/api/uploads`. The server stores the diff and returns `{ fileId, indexed }`. Read the indexed output to understand what changed. Keep `fileId` for the next step.
 3. **Choose a review pattern** and generate split metadata (see below).
 4. **`create_review(fileId, splitMeta)`** — pass the `fileId` and your split metadata. On success you get a `sessionId` and `reviewUrl`.
 5. **Share the `reviewUrl`** with the human reviewer. The URL contains a `?token=` parameter that grants review access to this specific session. Treat it as a credential: share the full URL as-is, do not strip, log, or reprocess the token separately.
@@ -73,7 +73,7 @@ The `splitMeta` parameter for `create_review` is a JSON object:
 
 ### Rules
 
-- Every change index from `upload_diff` output must appear in exactly one group.
+- Every change index from the upload response must appear in exactly one group.
 - Use range syntax for consecutive indices: `"0-2"` means `[0, 1, 2]`.
 - Choose the number of groups based on reviewability — keep tightly related changes together.
 - Order groups according to the chosen review pattern.

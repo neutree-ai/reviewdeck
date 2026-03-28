@@ -1,20 +1,18 @@
 /**
  * MCP server setup for reviewdeck.
  *
- * Exposes three tools over Streamable HTTP:
- *   - upload_diff: read a local diff file, upload + index it, return fileId and indexed changes
- *   - create_review: create a review session from uploaded diff + split meta
+ * Exposes two tools over Streamable HTTP:
+ *   - create_review: create a review session from an uploaded diff + split meta
  *   - get_review: query session status and results
+ *
+ * Diff upload is handled via REST `POST /api/uploads` (HTTP sideband),
+ * keeping large data out of the LLM token stream.
  */
 
-import { readFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPTransport } from "@hono/mcp";
 import { z } from "zod";
-import { parsePatch } from "../../../src/core/patch.ts";
-import { indexChanges, formatIndexedChanges } from "../../../src/core/split.ts";
 import type { SessionService } from "./sessions.ts";
 import type { Storage } from "./storage.ts";
 
@@ -25,55 +23,10 @@ function createMcpServer(sessions: SessionService, storage: Storage, baseUrl: st
   });
 
   server.tool(
-    "upload_diff",
-    "Read a diff file from the local filesystem, upload it to the server, and return indexed change lines. The diff content is read server-side — never pass diff content as a parameter. Returns fileId (for create_review) and the indexed changes for grouping.",
-    {
-      filePath: z.string().describe("Absolute path to a unified diff file on the local filesystem"),
-    },
-    async (params) => {
-      let content: string;
-      try {
-        content = await readFile(params.filePath, "utf-8");
-      } catch (e: any) {
-        return {
-          content: [
-            { type: "text", text: JSON.stringify({ error: `Cannot read file: ${e.message}` }) },
-          ],
-          isError: true,
-        };
-      }
-      if (!content.trim()) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ error: "Diff file is empty" }) }],
-          isError: true,
-        };
-      }
-      const fileId = randomUUID();
-      await storage.saveUpload(fileId, {
-        content,
-        createdBy: "mcp-agent",
-        createdAt: Date.now(),
-      });
-      const patches = parsePatch(content);
-      const changes = indexChanges(patches);
-      const formatted = formatIndexedChanges(changes);
-      return {
-        content: [
-          { type: "text", text: JSON.stringify({ fileId }) },
-          {
-            type: "text",
-            text: `${formatted}\n\nTotal: ${changes.length} change lines\n`,
-          },
-        ],
-      };
-    },
-  );
-
-  server.tool(
     "create_review",
     "Validate split metadata, generate sub-patches, and create a persistent review session. Returns sessionId and reviewUrl. Fails with a detailed error if any index is missing, duplicated, or out of range.",
     {
-      diffFileId: z.string().describe("File ID returned by upload_diff"),
+      diffFileId: z.string().describe("File ID returned by POST /api/uploads"),
       splitMeta: z
         .object({
           groups: z.array(
@@ -101,7 +54,7 @@ function createMcpServer(sessions: SessionService, storage: Storage, baseUrl: st
             {
               type: "text",
               text: JSON.stringify({
-                error: "Diff file not found. Upload it first with upload_diff.",
+                error: "Diff file not found. Upload it first via POST /api/uploads.",
               }),
             },
           ],
