@@ -22,6 +22,14 @@ function createMcpServer(sessions: SessionService, storage: Storage, baseUrl: st
     version: "0.1.0",
   });
 
+  function logTool(name: string, params: Record<string, unknown>, result: { isError?: boolean }) {
+    const status = result.isError ? "ERROR" : "OK";
+    const keys = Object.fromEntries(
+      Object.entries(params).map(([k, v]) => [k, typeof v === "string" ? v : "[object]"]),
+    );
+    console.error(`[mcp] tool=${name} ${status} params=${JSON.stringify(keys)}`);
+  }
+
   server.tool(
     "create_review",
     "Validate split metadata, generate sub-patches, and create a persistent review session. Returns sessionId and reviewUrl. Fails with a detailed error if any index is missing, duplicated, or out of range.",
@@ -49,17 +57,19 @@ function createMcpServer(sessions: SessionService, storage: Storage, baseUrl: st
     async (params) => {
       const upload = await storage.getUpload(params.diffFileId);
       if (!upload) {
-        return {
+        const result = {
           content: [
             {
-              type: "text",
+              type: "text" as const,
               text: JSON.stringify({
                 error: "Diff file not found. Upload it first via POST /api/uploads.",
               }),
             },
           ],
-          isError: true,
+          isError: true as const,
         };
+        logTool("create_review", params, result);
+        return result;
       }
       try {
         const session = await sessions.create({
@@ -69,10 +79,10 @@ function createMcpServer(sessions: SessionService, storage: Storage, baseUrl: st
           baseUrl,
         });
         await storage.deleteUpload(params.diffFileId);
-        return {
+        const result = {
           content: [
             {
-              type: "text",
+              type: "text" as const,
               text: JSON.stringify({
                 sessionId: session.id,
                 reviewUrl: session.reviewUrl,
@@ -81,11 +91,15 @@ function createMcpServer(sessions: SessionService, storage: Storage, baseUrl: st
             },
           ],
         };
+        logTool("create_review", params, result);
+        return result;
       } catch (e: any) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ error: e.message }) }],
-          isError: true,
+        const result = {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: e.message }) }],
+          isError: true as const,
         };
+        logTool("create_review", params, result);
+        return result;
       }
     },
   );
@@ -99,15 +113,17 @@ function createMcpServer(sessions: SessionService, storage: Storage, baseUrl: st
     async (params) => {
       const session = await sessions.get(params.sessionId);
       if (!session) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ error: "Session not found" }) }],
-          isError: true,
+        const result = {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "Session not found" }) }],
+          isError: true as const,
         };
+        logTool("get_review", params, result);
+        return result;
       }
-      return {
+      const result = {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: JSON.stringify({
               sessionId: session.id,
               status: session.status,
@@ -118,6 +134,8 @@ function createMcpServer(sessions: SessionService, storage: Storage, baseUrl: st
           },
         ],
       };
+      logTool("get_review", params, result);
+      return result;
     },
   );
 
@@ -126,34 +144,15 @@ function createMcpServer(sessions: SessionService, storage: Storage, baseUrl: st
 
 export function createMcpRouter(sessions: SessionService, storage: Storage, baseUrl: string): Hono {
   const router = new Hono();
-  const transports = new Map<string, StreamableHTTPTransport>();
 
   router.all("/", async (c) => {
-    const sessionId = c.req.header("mcp-session-id");
+    console.error(`[mcp] ${c.req.method} ${c.req.path}`);
 
-    if (sessionId && transports.has(sessionId)) {
-      const response = await transports.get(sessionId)!.handleRequest(c);
-      if (c.req.method === "DELETE") transports.delete(sessionId);
-      return response;
-    }
-
-    if (c.req.method === "POST") {
-      const mcpServer = createMcpServer(sessions, storage, baseUrl);
-      const transport = new StreamableHTTPTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
-      });
-      transport.onclose = () => {
-        if (transport.sessionId) transports.delete(transport.sessionId);
-      };
-      await mcpServer.connect(transport);
-      const response = await transport.handleRequest(c);
-      if (transport.sessionId) {
-        transports.set(transport.sessionId, transport);
-      }
-      return response;
-    }
-
-    return c.json({ error: "Invalid or missing mcp-session-id" }, 400);
+    const mcpServer = createMcpServer(sessions, storage, baseUrl);
+    const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined });
+    await mcpServer.connect(transport);
+    const response = await transport.handleRequest(c);
+    return response;
   });
 
   return router;

@@ -38,8 +38,16 @@ export function createApp(opts: AppOptions) {
   const { secret, sessions, storage } = opts;
 
   const app = new Hono();
-  const authed = new Hono();
-  authed.use(requireAuth(secret));
+
+  // --- Request logging ---
+  app.use(async (c, next) => {
+    const start = Date.now();
+    await next();
+    const ms = Date.now() - start;
+    const status = c.res.status;
+    const caller = c.get("callerId" as any) ?? "-";
+    console.error(`${c.req.method} ${c.req.path} ${status} ${ms}ms caller=${caller}`);
+  });
 
   // --- Health check (no auth) ---
   app.get("/health", (c) => c.json({ ok: true }));
@@ -50,62 +58,7 @@ export function createApp(opts: AppOptions) {
     app.route("/mcp", opts.mcpRouter);
   }
 
-  // --- Authed REST API ---
-
-  // Upload diff — returns fileId + indexed changes
-  authed.post("/api/uploads", async (c) => {
-    const body = await c.req.text();
-    if (!body.trim()) return c.json({ error: "Empty body" }, 400);
-    const callerId = c.get("callerId") as string;
-    const fileId = randomUUID();
-    await storage.saveUpload(fileId, { content: body, createdBy: callerId, createdAt: Date.now() });
-    const patches = parsePatch(body);
-    const changes = indexChanges(patches);
-    const indexed = formatIndexedChanges(changes);
-    return c.json(
-      { fileId, indexed: `${indexed}\n\nTotal: ${changes.length} change lines\n` },
-      201,
-    );
-  });
-
-  // Create session
-  authed.post("/api/sessions", async (c) => {
-    const parsed = await c.req.json<{ diffFileId: string; splitMeta: SplitMeta }>();
-    const upload = await storage.getUpload(parsed.diffFileId);
-    if (!upload) return c.json({ error: "Diff file not found" }, 404);
-    const callerId = c.get("callerId") as string;
-    try {
-      const session = await sessions.create({
-        diffContent: upload.content,
-        splitMeta: parsed.splitMeta,
-        createdBy: callerId,
-        baseUrl: opts.baseUrl,
-      });
-      await storage.deleteUpload(parsed.diffFileId);
-      return c.json(
-        { sessionId: session.id, reviewUrl: session.reviewUrl, status: session.status },
-        201,
-      );
-    } catch (e: any) {
-      return c.json({ error: e.message }, 400);
-    }
-  });
-
-  // Get session status
-  authed.get("/api/sessions/:id/status", async (c) => {
-    const session = await sessions.get(c.req.param("id"));
-    if (!session) return c.json({ error: "Session not found" }, 404);
-    return c.json({
-      sessionId: session.id,
-      status: session.status,
-      createdAt: session.createdAt,
-      createdBy: session.createdBy,
-      reviewUrl: session.reviewUrl,
-      submission: session.submission ?? null,
-    });
-  });
-
-  // --- Review UI API (review token auth, registered before authed catch-all) ---
+  // --- Review UI API (review token auth, no Bearer required) ---
 
   const requireReviewToken = async (c: any, next: any) => {
     const id = c.req.param("id");
@@ -134,11 +87,79 @@ export function createApp(opts: AppOptions) {
     return c.json({ ok: true });
   });
 
-  app.route("/", authed);
+  // --- Authed REST API (Bearer token required, mounted at /api) ---
+  const authed = new Hono();
+  authed.use(requireAuth(secret));
 
-  // --- Static / SPA ---
-  app.use("/*", serveStatic({ root: "./dist/web" }));
-  app.use("/*", serveStatic({ root: "./dist/web", path: "index.html" }));
+  // Upload diff — returns fileId + indexed changes
+  authed.post("/uploads", async (c) => {
+    const body = await c.req.text();
+    if (!body.trim()) return c.json({ error: "Empty body" }, 400);
+    const callerId = c.get("callerId") as string;
+    const fileId = randomUUID();
+    await storage.saveUpload(fileId, { content: body, createdBy: callerId, createdAt: Date.now() });
+    const patches = parsePatch(body);
+    const changes = indexChanges(patches);
+    const indexed = formatIndexedChanges(changes);
+    return c.json(
+      { fileId, indexed: `${indexed}\n\nTotal: ${changes.length} change lines\n` },
+      201,
+    );
+  });
+
+  // Create session
+  authed.post("/sessions", async (c) => {
+    const parsed = await c.req.json<{ diffFileId: string; splitMeta: SplitMeta }>();
+    const upload = await storage.getUpload(parsed.diffFileId);
+    if (!upload) return c.json({ error: "Diff file not found" }, 404);
+    const callerId = c.get("callerId") as string;
+    try {
+      const session = await sessions.create({
+        diffContent: upload.content,
+        splitMeta: parsed.splitMeta,
+        createdBy: callerId,
+        baseUrl: opts.baseUrl,
+      });
+      await storage.deleteUpload(parsed.diffFileId);
+      return c.json(
+        { sessionId: session.id, reviewUrl: session.reviewUrl, status: session.status },
+        201,
+      );
+    } catch (e: any) {
+      return c.json({ error: e.message }, 400);
+    }
+  });
+
+  // Get session status
+  authed.get("/sessions/:id/status", async (c) => {
+    const session = await sessions.get(c.req.param("id"));
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json({
+      sessionId: session.id,
+      status: session.status,
+      createdAt: session.createdAt,
+      createdBy: session.createdBy,
+      reviewUrl: session.reviewUrl,
+      submission: session.submission ?? null,
+    });
+  });
+
+  app.route("/api", authed);
+
+  // --- Static / SPA (last — serves review UI and assets without auth) ---
+  // Skip /api and /mcp paths so they are never shadowed by the SPA fallback.
+  const skipNonStatic = async (c: any, next: any) => {
+    const path = c.req.path;
+    if (path.startsWith("/api/") || path.startsWith("/mcp")) return next();
+    return serveStatic({ root: "./dist/web" })(c, next);
+  };
+  const spaFallback = async (c: any, next: any) => {
+    const path = c.req.path;
+    if (path.startsWith("/api/") || path.startsWith("/mcp")) return next();
+    return serveStatic({ root: "./dist/web", path: "index.html" })(c, next);
+  };
+  app.use("/*", skipNonStatic);
+  app.use("/*", spaFallback);
 
   return app;
 }

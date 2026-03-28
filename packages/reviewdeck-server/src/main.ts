@@ -51,7 +51,7 @@ if (databaseUrl) {
 
 const sessions = new SessionService(storage);
 
-const baseUrl = `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
+const baseUrl = process.env.BASE_URL ?? `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
 
 // MCP router (optional)
 let mcpRouter: Hono | undefined;
