@@ -3,12 +3,22 @@
     "src/web/app.tsx",
     "src/web/vite.config.ts",
     "packages/reviewdeck/src/main.ts",
-    "packages/reviewdeck-server/src/main.ts"
+    "packages/reviewdeck-server/src/main.ts",
+    "packages/reviewdeck-ui/src/index.ts",
+    "packages/reviewdeck-ui/vite.config.ts"
   ],
-  "project": ["src/**/*.ts", "src/**/*.tsx", "packages/*/src/**/*.ts"],
+  "project": ["src/**/*.ts", "src/**/*.tsx", "packages/*/src/**/*.ts", "packages/*/src/**/*.tsx"],
   "vitest": {
     "entry": ["src/**/*.test.ts", "packages/*/src/**/*.test.ts"]
   },
-  "ignoreDependencies": ["vitest", "vite", "tailwindcss"],
-  "ignoreExportsUsedInFile": true
+  "ignoreDependencies": [
+    "vitest",
+    "vite",
+    "tailwindcss",
+    "reviewdeck-ui",
+    "@tailwindcss/vite",
+    "@vitejs/plugin-react"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "ignore": ["packages/reviewdeck-ui/vite.config.ts"]
 }

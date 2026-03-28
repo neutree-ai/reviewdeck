@@ -17,10 +17,17 @@ module.exports = {
     },
     {
       name: "web-no-upper-layers",
-      comment: "web must not import from cli or server",
+      comment: "web must not import from cli or server (reviewdeck-ui is allowed)",
       severity: "error",
       from: { path: "^src/web" },
-      to: { path: "^packages/" },
+      to: { path: "^packages/(?!reviewdeck-ui)" },
+    },
+    {
+      name: "ui-no-upper-layers",
+      comment: "reviewdeck-ui must not import from cli, server, or web",
+      severity: "error",
+      from: { path: "^packages/reviewdeck-ui/src" },
+      to: { path: "(^src/web|^packages/reviewdeck/|^packages/reviewdeck-server/)" },
     },
     {
       name: "server-no-web",
