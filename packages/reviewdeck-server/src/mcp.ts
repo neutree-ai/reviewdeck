@@ -114,7 +114,9 @@ function createMcpServer(sessions: SessionService, storage: Storage, baseUrl: st
       const session = await sessions.get(params.sessionId);
       if (!session) {
         const result = {
-          content: [{ type: "text" as const, text: JSON.stringify({ error: "Session not found" }) }],
+          content: [
+            { type: "text" as const, text: JSON.stringify({ error: "Session not found" }) },
+          ],
           isError: true as const,
         };
         logTool("get_review", params, result);
