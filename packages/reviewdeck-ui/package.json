@@ -1,6 +1,13 @@
 {
   "name": "reviewdeck-ui",
   "version": "0.3.0",
+  "description": "Embeddable React component for reviewdeck code review UI.",
+  "homepage": "https://github.com/neutree-ai/reviewdeck",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neutree-ai/reviewdeck.git",
+    "directory": "packages/reviewdeck-ui"
+  },
   "files": [
     "dist/"
   ],
