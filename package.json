@@ -10,7 +10,7 @@
     "check-deps": "depcruise src packages/*/src --config .dependency-cruiser.cjs",
     "knip": "knip",
     "build:web": "vp build -c src/web/vite.config.ts",
-    "build": "npm run build --workspaces && npm run build:web",
+    "build": "npm run build -w reviewdeck-ui && npm run build:web && npm run build -w reviewdeck && npm run build -w reviewdeck-server",
     "lint": "vp test && vp check && knip && npm run check-deps",
     "prepare": "vp config"
   },
