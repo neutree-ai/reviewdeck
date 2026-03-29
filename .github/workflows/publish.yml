@@ -21,16 +21,11 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           cache: "npm"
 
-      - name: Verify tag matches package versions
+      - name: Verify tag matches package version
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
-          for pkg in packages/reviewdeck packages/reviewdeck-server packages/reviewdeck-ui; do
-            PKG_VERSION="$(node -p "JSON.parse(require('node:fs').readFileSync('$pkg/package.json', 'utf8')).version")"
-            if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-              echo "Version mismatch in $pkg: tag=$TAG_VERSION pkg=$PKG_VERSION"
-              exit 1
-            fi
-          done
+          PACKAGE_VERSION="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
+          test "$TAG_VERSION" = "$PACKAGE_VERSION"
 
       - run: npm ci
 
@@ -38,14 +33,6 @@ jobs:
 
       - run: npm run build
 
-      - run: npm publish -w packages/reviewdeck-ui --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - run: npm publish -w packages/reviewdeck --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - run: npm publish -w packages/reviewdeck-server --provenance --access public
+      - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

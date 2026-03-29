@@ -10,7 +10,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { parsePatch, applyPatch, reconstructBase } from "../../../src/core/patch.ts";
+import { parsePatch, applyPatch, reconstructBase } from "../core/patch.ts";
 import {
   indexChanges,
   formatIndexedChanges,
@@ -19,7 +19,7 @@ import {
   resolveSplitGroupMeta,
   type SplitMeta,
   type ResolvedSplitGroupMeta,
-} from "../../../src/core/split.ts";
+} from "../core/split.ts";
 
 const SUB_PATCH_SEPARATOR = "===SUB_PATCH===";
 

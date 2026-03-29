@@ -8,7 +8,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { resolve, extname } from "node:path";
 import { readFile, readdir, stat } from "node:fs/promises";
-import type { AgentDraftComment, ReviewSubmission } from "../../../src/core/types.ts";
+import type { AgentDraftComment, ReviewSubmission } from "../core/types.ts";
 
 interface SubPatch {
   index: number;

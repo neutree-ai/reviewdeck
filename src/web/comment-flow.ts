@@ -1,4 +1,4 @@
-import type { AgentDraftCommentDecision } from "./types";
+import type { AgentDraftCommentDecision } from "../core/types";
 
 export interface CommentFlowCounts {
   totalDrafts: number;

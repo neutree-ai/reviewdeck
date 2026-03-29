@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { countCommentFlow } from "./comment-flow";
-import type { AgentDraftCommentDecision } from "./types";
+import type { AgentDraftCommentDecision } from "../core/types";
 
 function makeDraft(
   id: string,

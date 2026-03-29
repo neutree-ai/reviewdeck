@@ -42,19 +42,17 @@ Publishing to npm is handled by GitHub Actions after the tag is pushed.
 ## Architecture
 
 ```
-L0  src/core/                         Pure computation — zero I/O, zero external deps
-L1  packages/reviewdeck/src/          CLI entry point — npm: reviewdeck
-L1  packages/reviewdeck-server/src/   HTTP review service + MCP — npm: reviewdeck-server
-L2  src/web/                          Web UI — React SPA served by cli or server
-    packages/reviewdeck/skills/       Published agent skills
+L0  src/core/       Pure computation — zero I/O, zero external deps
+L1  src/cli/        CLI entry point — file I/O, git, process control
+L2  src/web/        Web UI + API server (future)
+    skills/         Published agent skills for `npx skills add`
 ```
 
 ### Dependency rules (enforced by dependency-cruiser)
 
-- `core` must not import from `cli`, `server`, or `web`
-- `cli` must not import from `server` or `web`
-- `server` must not import from `cli` or `web`
-- `web` must not import from `cli` or `server`
+- `core` must not import from `cli` or `web`
+- `cli` must not import from `web`
+- `web` may import from `core`, not from `cli`
 
 ## Testing
 

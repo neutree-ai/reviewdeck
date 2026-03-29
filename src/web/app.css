@@ -1,4 +1,4 @@
-@import "tailwindcss" prefix(rd);
+@import "tailwindcss";
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&display=swap");
 
 @theme {
@@ -44,7 +44,7 @@
 /* ------------------------------------------------------------------ */
 
 body {
-  @apply rd:bg-background rd:text-foreground rd:antialiased;
+  @apply bg-background text-foreground antialiased;
   font-family: var(--font-sans);
 }
 
