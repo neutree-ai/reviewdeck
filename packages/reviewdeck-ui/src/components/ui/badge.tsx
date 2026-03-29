@@ -11,6 +11,7 @@ const badgeVariants = cva(
         secondary: "rd:bg-muted/60 rd:text-muted-foreground",
         success: "rd:bg-success/12 rd:text-success",
         destructive: "rd:bg-destructive/12 rd:text-destructive",
+        outline: "rd:border rd:border-border rd:text-muted-foreground",
       },
       size: {
         default: "rd:px-2 rd:py-0.5 rd:text-[11px]",

@@ -35,6 +35,7 @@ export interface ReviewDeckProps {
   serverUrl: string;
   diffStyle?: "unified" | "split";
   readOnly?: boolean;
+  onSubmit?: (submission: ReviewSubmission) => void;
 }
 
 const DIFF_STYLE_STORAGE_KEY = "reviewdeck:review:diff-style";
@@ -473,21 +474,27 @@ function FileDiffView({
       }
 
       if (ann.metadata.kind === "draft") {
+        const { draft } = ann.metadata;
         return (
           <DraftCommentBubble
-            draft={ann.metadata.draft}
-            onSetStatus={(status) => onSetDraftStatus(ann.metadata.draft.id, status)}
+            draft={draft}
+            onSetStatus={(status) => onSetDraftStatus(draft.id, status)}
             readOnly={readOnly}
           />
         );
       }
 
-      return (
-        <CommentBubble
-          comment={ann.metadata.comment}
-          onDelete={() => onDeleteComment(ann.metadata.commentIndex)}
-        />
-      );
+      if (ann.metadata.kind === "comment") {
+        const { comment, commentIndex } = ann.metadata;
+        return (
+          <CommentBubble
+            comment={comment}
+            onDelete={() => onDeleteComment(commentIndex)}
+          />
+        );
+      }
+
+      return null;
     },
     [fileDiff.name, onAddComment, onDeleteComment, onSetDraftStatus, readOnly],
   );
@@ -736,7 +743,8 @@ export function ReviewDeck(props: ReviewDeckProps) {
     await submitReview(apiConfig, submission);
     setSubmittedCount(submission.comments.length);
     setSubmitted(true);
-  }, [apiConfig, submission]);
+    props.onSubmit?.(submission);
+  }, [apiConfig, submission, props.onSubmit]);
 
   const toggleViewed = useCallback((subIndex: number, fileName: string) => {
     setViewedFiles((prev) => {
