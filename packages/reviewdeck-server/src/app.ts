@@ -130,6 +130,21 @@ export function createApp(opts: AppOptions) {
     }
   });
 
+  // List sessions for the authenticated caller
+  authed.get("/sessions", async (c) => {
+    const callerId = c.get("callerId") as string;
+    const list = await storage.listSessions(callerId);
+    return c.json(
+      list.map((s) => ({
+        sessionId: s.id,
+        status: s.status,
+        createdAt: s.createdAt,
+        reviewUrl: s.reviewUrl,
+        submission: s.submission ?? null,
+      })),
+    );
+  });
+
   // Get session status
   authed.get("/sessions/:id/status", async (c) => {
     const session = await sessions.get(c.req.param("id"));

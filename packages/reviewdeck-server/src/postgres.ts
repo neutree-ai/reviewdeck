@@ -89,6 +89,15 @@ export class PostgresStorage implements Storage {
     return this.getSession(id);
   }
 
+  async listSessions(createdBy: string): Promise<Session[]> {
+    const rows = await this.sql`
+      SELECT id, review_token, status, created_at, created_by, split_meta, sub_patches, review_url, submission
+      FROM sessions WHERE created_by = ${createdBy}
+      ORDER BY created_at DESC
+    `;
+    return rows.map((row) => this.rowToSession(row));
+  }
+
   async saveUpload(id: string, upload: Upload): Promise<void> {
     await this.sql`
       INSERT INTO uploads (id, content, created_by, created_at)

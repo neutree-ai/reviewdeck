@@ -5,6 +5,7 @@ export interface Storage {
   saveSession(session: Session): Promise<void>;
   getSession(id: string): Promise<Session | undefined>;
   updateSession(id: string, updates: Partial<Session>): Promise<Session | undefined>;
+  listSessions(createdBy: string): Promise<Session[]>;
 
   // Uploads
   saveUpload(id: string, upload: Upload): Promise<void>;
@@ -33,6 +34,13 @@ export class MemoryStorage implements Storage {
     if (!session) return undefined;
     Object.assign(session, updates);
     return structuredClone(session);
+  }
+
+  async listSessions(createdBy: string): Promise<Session[]> {
+    return [...this.sessions.values()]
+      .filter((s) => s.createdBy === createdBy)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((s) => structuredClone(s));
   }
 
   async saveUpload(id: string, upload: Upload): Promise<void> {
