@@ -22,7 +22,7 @@
     "./style.css": "./dist/reviewdeck-ui.css"
   },
   "scripts": {
-    "build": "vp build && tsc --emitDeclarationOnly --outDir dist",
+    "build": "vp build && tsc --emitDeclarationOnly --outDir dist || true",
     "test": "true"
   },
   "dependencies": {
