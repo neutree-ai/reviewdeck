@@ -22,6 +22,14 @@ export class PostgresStorage implements Storage {
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
       )
     `;
+    // Migrate from 0.3.x schema: add missing columns before creating indexes
+    await this.sql`
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS caller TEXT NOT NULL DEFAULT 'anonymous'
+    `;
+    await this.sql`
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    `;
+
     await this.sql`
       CREATE INDEX IF NOT EXISTS idx_sessions_review_token ON sessions (review_token)
     `;
