@@ -64,7 +64,7 @@ export async function startServer(opts: ServerOptions): Promise<void> {
   app.use("/mcp/*", createAuthMiddleware(secret));
 
   // Mount API routes
-  app.route("/api", createReviewRoutes(storage));
+  app.route("/api", createReviewRoutes(storage, baseUrl));
   app.route("/", createHealthRoutes());
   app.route("/mcp", createMcpRouter(storage, baseUrl));
 

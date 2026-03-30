@@ -12,7 +12,7 @@ import type { SplitMeta, ReviewSubmission } from "../../core/types.ts";
 import type { Storage, Session, SubPatchRecord } from "../storage/interface.ts";
 import { getCallerId } from "../auth.ts";
 
-export function createReviewRoutes(storage: Storage): Hono {
+export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
   const app = new Hono();
 
   // -----------------------------------------------------------------------
@@ -87,6 +87,7 @@ export function createReviewRoutes(storage: Storage): Hono {
       {
         sessionId: session.id,
         reviewToken: session.reviewToken,
+        reviewUrl: `${baseUrl}/review/${session.id}?token=${session.reviewToken}`,
         status: session.status,
         patchCount: subPatches.length,
       },
@@ -106,6 +107,7 @@ export function createReviewRoutes(storage: Storage): Hono {
       status: session.status,
       caller: session.caller,
       patchCount: session.subPatches.length,
+      reviewUrl: `${baseUrl}/review/${session.id}?token=${session.reviewToken}`,
       submission: session.submission,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
@@ -123,6 +125,7 @@ export function createReviewRoutes(storage: Storage): Hono {
         sessionId: s.id,
         status: s.status,
         caller: s.caller,
+        reviewUrl: `${baseUrl}/review/${s.id}?token=${s.reviewToken}`,
         patchCount: s.subPatches.length,
         createdAt: s.createdAt,
         updatedAt: s.updatedAt,

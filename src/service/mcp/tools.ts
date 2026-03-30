@@ -107,7 +107,7 @@ export function registerTools(server: McpServer, storage: Storage, baseUrl: stri
         await storage.saveSession(session);
         await storage.deleteUpload(params.diffFileId);
 
-        const reviewUrl = `${baseUrl}?token=${session.reviewToken}`;
+        const reviewUrl = `${baseUrl}/review/${session.id}?token=${session.reviewToken}`;
         logTool("create_review", params, false);
         return textResult({ sessionId: session.id, reviewUrl, status: session.status });
       } catch (e: any) {
