@@ -37,7 +37,12 @@ function textResult(data: unknown, isError = false) {
   return result;
 }
 
-export function registerTools(server: McpServer, storage: Storage, baseUrl: string): void {
+export function registerTools(
+  server: McpServer,
+  storage: Storage,
+  baseUrl: string,
+  caller: string,
+): void {
   server.tool(
     "create_review",
     "Validate split metadata, generate sub-patches, and create a persistent review session. Returns sessionId and reviewUrl. Upload diffs first via POST /api/uploads.",
@@ -96,7 +101,7 @@ export function registerTools(server: McpServer, storage: Storage, baseUrl: stri
           id: randomUUID(),
           reviewToken: randomUUID(),
           status: "reviewing",
-          caller: "mcp-agent",
+          caller,
           splitMeta,
           subPatches,
           submission: null,
