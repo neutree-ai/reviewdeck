@@ -114,8 +114,8 @@ export function createReviewRoutes(storage: Storage): Hono {
   // List sessions
   // -----------------------------------------------------------------------
   app.get("/sessions", async (c) => {
-    const caller = c.req.query("caller");
-    const sessions = await storage.listSessions(caller || undefined);
+    const caller = getCallerId(c);
+    const sessions = await storage.listSessions(caller === "anonymous" ? undefined : caller);
     return c.json(
       sessions.map((s) => ({
         sessionId: s.id,
