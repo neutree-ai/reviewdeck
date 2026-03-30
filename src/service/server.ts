@@ -6,6 +6,7 @@ import type { Storage } from "./storage/interface.ts";
 import { createReviewRoutes } from "./routes/reviews.ts";
 import { createHealthRoutes } from "./routes/health.ts";
 import { createMcpRouter } from "./mcp/transport.ts";
+import { createAuthMiddleware } from "./auth.ts";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -55,6 +56,11 @@ export async function startServer(opts: ServerOptions): Promise<void> {
   const app = new Hono();
 
   const baseUrl = `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
+  const secret = process.env.REVIEWDECK_SECRET;
+
+  // Auth middleware on /api/* and /mcp*
+  app.use("/api/*", createAuthMiddleware(secret));
+  app.use("/mcp/*", createAuthMiddleware(secret));
 
   // Mount API routes
   app.route("/api", createReviewRoutes(storage));

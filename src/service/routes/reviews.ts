@@ -9,6 +9,7 @@ import {
 } from "../../core/split.ts";
 import type { SplitMeta, ReviewSubmission } from "../../core/types.ts";
 import type { Storage, Session, SubPatchRecord } from "../storage/interface.ts";
+import { getCallerId } from "../auth.ts";
 
 export function createReviewRoutes(storage: Storage): Hono {
   const app = new Hono();
@@ -32,11 +33,11 @@ export function createReviewRoutes(storage: Storage): Hono {
   // Create a review session from an uploaded diff + split metadata
   // -----------------------------------------------------------------------
   app.post("/reviews", async (c) => {
-    const { fileId, splitMeta, caller } = await c.req.json<{
+    const { fileId, splitMeta } = await c.req.json<{
       fileId: string;
       splitMeta: SplitMeta;
-      caller?: string;
     }>();
+    const caller = getCallerId(c);
 
     const upload = await storage.getUpload(fileId);
     if (!upload) return c.json({ error: "Upload not found" }, 404);
