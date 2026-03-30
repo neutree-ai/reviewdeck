@@ -16,10 +16,17 @@
   "files": [
     "dist/reviewdeck.mjs",
     "dist/web",
+    "dist/ui",
     "skills/reviewdeck",
     "README.md"
   ],
   "type": "module",
+  "exports": {
+    "./ui": {
+      "import": "./dist/ui/reviewdeck-ui.js"
+    },
+    "./ui/style.css": "./dist/ui/style.css"
+  },
   "scripts": {
     "test": "vp test",
     "check": "vp check",
@@ -27,7 +34,8 @@
     "knip": "knip",
     "build:cli": "esbuild src/cli/main.ts --bundle --platform=node --format=esm --outfile=dist/reviewdeck.mjs --banner:js='#!/usr/bin/env node'",
     "build:web": "vp build -c src/web/vite.config.ts",
-    "build": "npm run build:cli && npm run build:web",
+    "build:ui": "vp build -c src/web/vite.config.lib.ts",
+    "build": "npm run build:cli && npm run build:web && npm run build:ui",
     "lint": "vp test && vp check && knip && depcruise src --config .dependency-cruiser.cjs",
     "pack:dry-run": "npm pack --dry-run",
     "prepack": "npm run build",

@@ -3,7 +3,9 @@
     "src/cli/main.ts",
     "src/service/serve.ts",
     "src/web/app.tsx",
+    "src/web/lib-entry.ts",
     "src/web/vite.config.ts",
+    "src/web/vite.config.lib.ts",
     "src/web/vite.config.inline.ts"
   ],
   "project": ["src/**/*.ts", "src/**/*.tsx"],
