@@ -34,9 +34,11 @@
     "prepare": "vp config"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.12",
     "@pierre/diffs": "^1.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "hono": "^4.12.9",
     "lucide-react": "^0.577.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

@@ -5,6 +5,7 @@
  *   reviewdeck index <patch> [-o <file>]
  *   reviewdeck split <patch> <meta | -> [-o <dir>]
  *   reviewdeck render [<dir> | -]
+ *   reviewdeck serve [-p <port>] [--host <addr>] [--memory] [--db <url>]
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -46,6 +47,11 @@ switch (subcommand) {
   case "render":
     await cmdRender(args.slice(1));
     break;
+  case "serve": {
+    const { cmdServe } = await import("../service/serve.ts");
+    await cmdServe(args.slice(1));
+    break;
+  }
   default:
     console.error(`Unknown subcommand: ${subcommand}`);
     printUsage();
@@ -66,6 +72,10 @@ function printUsage() {
       Start the human review UI for the generated sub-patches.
       Use this after "split" when the goal is to let a person review the stack.
       It opens a browser and prints a submission JSON object to stdout.
+
+  reviewdeck serve [-p <port>] [--host <addr>] [--memory] [--db <url>]
+      Start the persistent review service with REST API.
+      Supports multiple concurrent sessions, diff uploads, and review tokens.
 
 Examples:
   gh pr diff 123 > pr.diff

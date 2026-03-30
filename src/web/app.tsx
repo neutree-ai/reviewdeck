@@ -44,16 +44,21 @@ type AnnotationMeta =
   | { kind: "draft"; draft: AgentDraftCommentDecision }
   | { kind: "pending" };
 
+function apiUrl(path: string): string {
+  const token = new URLSearchParams(window.location.search).get("token");
+  return token ? `${path}?token=${encodeURIComponent(token)}` : path;
+}
+
 async function fetchPatches(): Promise<SubPatch[]> {
   if ((window as { __PATCHES__?: SubPatch[] }).__PATCHES__) {
     return (window as { __PATCHES__: SubPatch[] }).__PATCHES__;
   }
-  const res = await fetch("/api/patches");
+  const res = await fetch(apiUrl("/api/patches"));
   return res.json();
 }
 
 async function submitReview(submission: ReviewSubmission): Promise<void> {
-  await fetch("/api/submit", {
+  await fetch(apiUrl("/api/submit"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(submission),
