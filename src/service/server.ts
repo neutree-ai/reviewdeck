@@ -5,6 +5,7 @@ import { readFile, stat } from "node:fs/promises";
 import type { Storage } from "./storage/interface.ts";
 import { createReviewRoutes } from "./routes/reviews.ts";
 import { createHealthRoutes } from "./routes/health.ts";
+import { createMcpRouter } from "./mcp/transport.ts";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -53,9 +54,12 @@ export async function startServer(opts: ServerOptions): Promise<void> {
 
   const app = new Hono();
 
+  const baseUrl = `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
+
   // Mount API routes
   app.route("/api", createReviewRoutes(storage));
   app.route("/", createHealthRoutes());
+  app.route("/mcp", createMcpRouter(storage, baseUrl));
 
   // Static file serving (SPA fallback)
   app.get("*", async (c) => {
@@ -82,7 +86,12 @@ export async function startServer(opts: ServerOptions): Promise<void> {
   });
 
   const server = serve({ fetch: app.fetch, port, hostname: host }, (info) => {
-    console.error(`ReviewDeck server running at http://${host}:${info.port}`);
+    console.error(
+      `ReviewDeck server running at http://${host === "0.0.0.0" ? "localhost" : host}:${info.port}`,
+    );
+    console.error(
+      `MCP endpoint: http://${host === "0.0.0.0" ? "localhost" : host}:${info.port}/mcp`,
+    );
   });
 
   // Graceful shutdown
