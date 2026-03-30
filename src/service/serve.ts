@@ -1,5 +1,7 @@
 import { parseArgs } from "node:util";
 import { MemoryStorage } from "./storage/memory.ts";
+import { PostgresStorage } from "./storage/postgres.ts";
+import type { Storage } from "./storage/interface.ts";
 import { startServer } from "./server.ts";
 
 export async function cmdServe(args: string[]): Promise<void> {
@@ -21,15 +23,18 @@ export async function cmdServe(args: string[]): Promise<void> {
 
   const port = parseInt(values.port!, 10);
   const host = values.host!;
+  const dbUrl = values.db || process.env.DATABASE_URL;
 
-  // For now, only MemoryStorage is available. Postgres comes in Phase 2.
-  if (values.db) {
-    console.error("ERROR: --db (Postgres storage) is not yet implemented. Use --memory for now.");
-    process.exit(1);
+  let storage: Storage;
+  if (values.memory || !dbUrl) {
+    storage = new MemoryStorage();
+    console.error("Using in-memory storage (data will not persist across restarts).");
+  } else {
+    const pg = new PostgresStorage(dbUrl);
+    await pg.init();
+    storage = pg;
+    console.error("Using Postgres storage.");
   }
-
-  const storage = new MemoryStorage();
-  console.error("Using in-memory storage (data will not persist across restarts).");
 
   await startServer({ storage, port, host });
 }
@@ -44,9 +49,10 @@ Options:
   -p, --port <port>   Port to listen on (default: 3847)
   --host <addr>       Host to bind to (default: 0.0.0.0)
   --memory            Use in-memory storage (default, no persistence)
-  --db <url>          Postgres connection URL (not yet implemented)
+  --db <url>          Postgres connection URL (or set DATABASE_URL)
 
 Examples:
   reviewdeck serve --memory
-  reviewdeck serve -p 8080`);
+  reviewdeck serve --db postgres://user:pass@localhost:5432/reviewdeck
+  DATABASE_URL=postgres://... reviewdeck serve`);
 }
