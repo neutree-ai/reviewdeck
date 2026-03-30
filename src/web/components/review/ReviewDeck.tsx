@@ -499,7 +499,7 @@ function FileDiffView({
               "flex size-[18px] shrink-0 items-center justify-center rounded border-2 transition-colors",
               viewed
                 ? "border-primary bg-primary text-primary-foreground"
-                : "border-muted-foreground/50 bg-transparent",
+                : "border-muted-foreground bg-transparent",
             )}
             title={viewed ? "Mark as unviewed" : "Mark as viewed"}
           >
@@ -791,7 +791,7 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
 
   if (submitted) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4">
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-background text-foreground">
         <div className="animate-fade-in-up flex size-14 items-center justify-center rounded-full bg-success/15 shadow-[0_0_20px_oklch(0.65_0.17_155/0.15)]">
           <Check className="size-6 text-success" strokeWidth={2.5} />
         </div>
@@ -810,7 +810,7 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
 
   if (patches.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3">
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-background text-foreground">
         <div className="animate-pulse-dot size-2 rounded-full bg-primary" />
         <span className="font-[family-name:var(--font-mono)] text-xs tracking-widest text-muted-foreground">
           LOADING
@@ -820,8 +820,8 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
   }
 
   return (
-    <div className="flex h-full">
-      <nav className="flex w-72 shrink-0 flex-col border-r border-border bg-card/40">
+    <div className="flex h-full bg-background text-foreground">
+      <nav className="flex w-72 shrink-0 flex-col border-r border-border bg-card">
         <div className="flex items-center justify-between px-4 pb-3 pt-5">
           <div>
             <h1 className="font-[family-name:var(--font-mono)] text-[11px] font-medium tracking-[0.2em] text-muted-foreground">
