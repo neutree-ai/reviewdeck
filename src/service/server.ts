@@ -55,7 +55,8 @@ export async function startServer(opts: ServerOptions): Promise<void> {
 
   const app = new Hono();
 
-  const baseUrl = `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
+  const baseUrl =
+    process.env.BASE_URL ?? `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
   const secret = process.env.REVIEWDECK_SECRET;
 
   // Auth middleware on /api/* and /mcp*
