@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { parsePatch } from "../../core/patch.ts";
 import {
   indexChanges,
+  formatIndexedChanges,
   validateMeta,
   generateSubPatches,
   resolveSplitGroupMeta,
@@ -25,8 +26,9 @@ export function createReviewRoutes(storage: Storage): Hono {
     await storage.saveUpload({ id, diff: body, createdAt: new Date() });
     const patches = parsePatch(body);
     const changes = indexChanges(patches);
+    const index = formatIndexedChanges(changes);
 
-    return c.json({ fileId: id, changeCount: changes.length }, 201);
+    return c.json({ fileId: id, changeCount: changes.length, index }, 201);
   });
 
   // -----------------------------------------------------------------------
