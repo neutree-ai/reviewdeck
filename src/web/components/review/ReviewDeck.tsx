@@ -791,7 +791,7 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
 
   if (submitted) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4">
+      <div className="flex h-full flex-col items-center justify-center gap-4">
         <div className="animate-fade-in-up flex size-14 items-center justify-center rounded-full bg-success/15 shadow-[0_0_20px_oklch(0.65_0.17_155/0.15)]">
           <Check className="size-6 text-success" strokeWidth={2.5} />
         </div>
@@ -810,7 +810,7 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
 
   if (patches.length === 0) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-3">
+      <div className="flex h-full flex-col items-center justify-center gap-3">
         <div className="animate-pulse-dot size-2 rounded-full bg-primary" />
         <span className="font-[family-name:var(--font-mono)] text-xs tracking-widest text-muted-foreground">
           LOADING
@@ -820,7 +820,7 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
   }
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-full">
       <nav className="flex w-72 shrink-0 flex-col border-r border-border bg-card/40">
         <div className="flex items-center justify-between px-4 pb-3 pt-5">
           <div>

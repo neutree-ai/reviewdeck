@@ -24,7 +24,9 @@ function App() {
   }
 
   return (
-    <ReviewDeck patches={patches} onSubmit={(submission) => submitReview(submission, { token })} />
+    <div className="h-screen">
+      <ReviewDeck patches={patches} onSubmit={(submission) => submitReview(submission, { token })} />
+    </div>
   );
 }
 
