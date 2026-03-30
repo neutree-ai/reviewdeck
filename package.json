@@ -1,6 +1,6 @@
 {
   "name": "reviewdeck",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Split large PR diffs into reviewable sub-patches via indexed groups.",
   "homepage": "https://github.com/neutree-ai/reviewdeck",
   "bugs": {
