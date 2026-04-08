@@ -10,7 +10,6 @@ import {
 } from "../../core/split.ts";
 import type { SplitMeta, ReviewSubmission } from "../../core/types.ts";
 import type { Storage, Session, SubPatchRecord } from "../storage/interface.ts";
-import { getCallerId } from "../auth.ts";
 
 export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
   const app = new Hono();
@@ -39,7 +38,7 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
       fileId: string;
       splitMeta: SplitMeta;
     }>();
-    const caller = getCallerId(c);
+    const caller = (c.get("caller") as string) ?? "anonymous";
 
     const upload = await storage.getUpload(fileId);
     if (!upload) return c.json({ error: "Upload not found" }, 404);
@@ -118,7 +117,7 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
   // List sessions
   // -----------------------------------------------------------------------
   app.get("/sessions", async (c) => {
-    const caller = getCallerId(c);
+    const caller = (c.get("caller") as string) ?? "anonymous";
     const sessions = await storage.listSessions(caller === "anonymous" ? undefined : caller);
     return c.json(
       sessions.map((s) => ({

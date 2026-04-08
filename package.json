@@ -49,6 +49,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "hono": "^4.12.9",
+    "jose": "^6.2.2",
     "lucide-react": "^0.577.0",
     "postgres": "^3.4.8",
     "react": "^19.2.4",

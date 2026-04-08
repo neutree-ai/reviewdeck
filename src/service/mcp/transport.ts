@@ -7,13 +7,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPTransport } from "@hono/mcp";
 import type { Storage } from "../storage/interface.ts";
 import { registerTools } from "./tools.ts";
-import { getCallerId } from "../auth.ts";
 
 export function createMcpRouter(storage: Storage, baseUrl: string): Hono {
   const router = new Hono();
 
   router.all("/", async (c) => {
-    const caller = getCallerId(c);
+    const caller = (c.get("caller") as string) ?? "anonymous";
     console.error(`[mcp] ${c.req.method} ${c.req.path} caller=${caller}`);
 
     const server = new McpServer({ name: "reviewdeck", version: "0.4.0" });

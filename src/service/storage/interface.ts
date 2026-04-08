@@ -1,4 +1,6 @@
 import type { ReviewSubmission, SplitMeta } from "../../core/types.ts";
+import type { User, AuthCode, RefreshTokenRecord } from "../auth/types.ts";
+import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
 
 export interface SubPatchRecord {
   index: number;
@@ -49,6 +51,24 @@ export interface Storage {
     updates: Partial<Pick<Session, "status" | "submission" | "subPatches" | "updatedAt">>,
   ): Promise<Session | undefined>;
   listSessions(caller?: string): Promise<Session[]>;
+
+  // --- Auth: Users ---
+  saveUser(user: User): Promise<void>;
+  getUserById(id: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+
+  // --- Auth: OAuth clients ---
+  saveOAuthClient(client: OAuthClientInformationFull): Promise<void>;
+  getOAuthClient(clientId: string): Promise<OAuthClientInformationFull | undefined>;
+
+  // --- Auth: Authorization codes (short-lived, consume-once) ---
+  saveAuthCode(authCode: AuthCode): Promise<void>;
+  consumeAuthCode(code: string): Promise<AuthCode | undefined>;
+
+  // --- Auth: Refresh tokens ---
+  saveRefreshToken(record: RefreshTokenRecord): Promise<void>;
+  getRefreshToken(token: string): Promise<RefreshTokenRecord | undefined>;
+  deleteRefreshToken(token: string): Promise<void>;
 
   close(): Promise<void>;
 }
