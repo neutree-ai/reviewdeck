@@ -34,6 +34,7 @@ export async function fetchPatches(opts: DataOptions = {}): Promise<SubPatch[]> 
     return (window as { __PATCHES__: SubPatch[] }).__PATCHES__;
   }
   const res = await fetch(buildUrl("/api/patches", opts));
+  if (!res.ok) throw new Error(`Failed to fetch patches: ${res.status}`);
   return res.json();
 }
 
