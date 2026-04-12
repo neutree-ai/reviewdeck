@@ -83,7 +83,7 @@ export async function startServer(opts: ServerOptions): Promise<void> {
   app.route("/auth/sso", createUpstreamRouter(storage, provider, baseUrl));
 
   // Auth middleware on /api/* and /mcp*
-  app.use("/api/*", createApiAuthMiddleware(provider));
+  app.use("/api/*", createApiAuthMiddleware(provider, storage));
   app.use("/mcp/*", createOAuthMiddleware(provider));
 
   // Mount API routes

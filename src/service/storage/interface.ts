@@ -1,5 +1,11 @@
 import type { ReviewSubmission, SplitMeta } from "../../core/types.ts";
-import type { User, AuthCode, RefreshTokenRecord, IdentityProvider } from "../auth/types.ts";
+import type {
+  User,
+  AuthCode,
+  RefreshTokenRecord,
+  IdentityProvider,
+  UploadToken,
+} from "../auth/types.ts";
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
 
 export interface SubPatchRecord {
@@ -69,6 +75,10 @@ export interface Storage {
   // --- Auth: OAuth clients ---
   saveOAuthClient(client: OAuthClientInformationFull): Promise<void>;
   getOAuthClient(clientId: string): Promise<OAuthClientInformationFull | undefined>;
+
+  // --- Auth: Upload tokens (one-time, short-lived) ---
+  saveUploadToken(token: UploadToken): Promise<void>;
+  consumeUploadToken(token: string): Promise<UploadToken | undefined>;
 
   // --- Auth: Authorization codes (short-lived, consume-once) ---
   saveAuthCode(authCode: AuthCode): Promise<void>;

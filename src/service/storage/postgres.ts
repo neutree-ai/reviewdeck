@@ -1,6 +1,12 @@
 import postgres from "postgres";
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
-import type { User, AuthCode, RefreshTokenRecord, IdentityProvider } from "../auth/types.ts";
+import type {
+  User,
+  AuthCode,
+  RefreshTokenRecord,
+  IdentityProvider,
+  UploadToken,
+} from "../auth/types.ts";
 import type { Session, Storage, SubPatchRecord, Upload } from "./interface.ts";
 
 export class PostgresStorage implements Storage {
@@ -92,6 +98,15 @@ export class PostgresStorage implements Storage {
         scopes      TEXT[] NOT NULL DEFAULT '{}',
         resource    TEXT,
         expires_at  BIGINT NOT NULL
+      )
+    `;
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS upload_tokens (
+        token       TEXT PRIMARY KEY,
+        user_id     TEXT NOT NULL,
+        agent_id    TEXT,
+        expires_at  BIGINT NOT NULL,
+        used        BOOLEAN NOT NULL DEFAULT false
       )
     `;
   }
@@ -219,6 +234,31 @@ export class PostgresStorage implements Storage {
       .sql`SELECT id, username, password_hash, external_provider, external_id, display_name, email, created_at FROM users WHERE external_provider = ${provider} AND external_id = ${externalId}`;
     if (rows.length === 0) return undefined;
     return this.rowToUser(rows[0]!);
+  }
+
+  // --- Auth: Upload tokens ---
+
+  async saveUploadToken(token: UploadToken): Promise<void> {
+    await this.sql`
+      INSERT INTO upload_tokens (token, user_id, agent_id, expires_at, used)
+      VALUES (${token.token}, ${token.userId}, ${token.agentId ?? null}, ${token.expiresAt}, ${token.used})
+    `;
+  }
+
+  async consumeUploadToken(token: string): Promise<UploadToken | undefined> {
+    const rows = await this.sql`
+      DELETE FROM upload_tokens WHERE token = ${token} AND used = false
+      RETURNING token, user_id, agent_id, expires_at, used
+    `;
+    if (rows.length === 0) return undefined;
+    const row = rows[0]!;
+    return {
+      token: row.token,
+      userId: row.user_id,
+      agentId: row.agent_id ?? undefined,
+      expiresAt: Number(row.expires_at),
+      used: true,
+    };
   }
 
   // --- Auth: Identity providers ---

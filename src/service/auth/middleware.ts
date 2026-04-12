@@ -1,5 +1,6 @@
 import type { Context, Next } from "hono";
 import type { ReviewDeckOAuthProvider } from "./provider.ts";
+import type { Storage } from "../storage/interface.ts";
 
 /**
  * OAuth Bearer token middleware for API and MCP routes.
@@ -24,18 +25,33 @@ export function createOAuthMiddleware(provider: ReviewDeckOAuthProvider) {
 }
 
 /**
- * Middleware that allows either OAuth Bearer token or review token (?token=) for SPA endpoints.
+ * Middleware that allows either OAuth Bearer token or scoped tokens (?token=) for
+ * SPA endpoints (/patches, /submit) and presigned upload tokens (/uploads).
  */
-export function createApiAuthMiddleware(provider: ReviewDeckOAuthProvider) {
+export function createApiAuthMiddleware(provider: ReviewDeckOAuthProvider, storage: Storage) {
   const oauthMiddleware = createOAuthMiddleware(provider);
 
   return async (c: Context, next: Next) => {
-    // Allow token-scoped SPA endpoints without OAuth
     const path = new URL(c.req.url).pathname;
     const token = c.req.query("token");
+
+    // Review token bypass for SPA endpoints
     if (token && (path.endsWith("/patches") || path.endsWith("/submit"))) {
       return next();
     }
+
+    // Presigned upload token bypass
+    if (token && path.endsWith("/uploads")) {
+      const uploadToken = await storage.consumeUploadToken(token);
+      if (!uploadToken) return c.json({ error: "Invalid or expired upload token" }, 401);
+      if (uploadToken.expiresAt < Math.floor(Date.now() / 1000)) {
+        return c.json({ error: "Upload token expired" }, 401);
+      }
+      c.set("userId", uploadToken.userId);
+      c.set("agentId", uploadToken.agentId);
+      return next();
+    }
+
     return oauthMiddleware(c, next);
   };
 }

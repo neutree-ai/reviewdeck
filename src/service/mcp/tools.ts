@@ -125,6 +125,36 @@ export function registerTools(
   );
 
   server.tool(
+    "request_upload_url",
+    "Generate a one-time presigned URL for uploading a diff file. The URL can be used with a simple curl/fetch without needing an Authorization header.",
+    {
+      agentId: z.string().optional().describe("Optional agent identifier"),
+      expiresIn: z
+        .number()
+        .int()
+        .min(60)
+        .max(3600)
+        .optional()
+        .describe("Token lifetime in seconds (default 300, min 60, max 3600)"),
+    },
+    async (params) => {
+      const ttl = params.expiresIn ?? 300;
+      const token = randomUUID();
+      await storage.saveUploadToken({
+        token,
+        userId,
+        agentId: params.agentId,
+        expiresAt: Math.floor(Date.now() / 1000) + ttl,
+        used: false,
+      });
+
+      const uploadUrl = `${baseUrl}/api/uploads?token=${token}`;
+      logTool("request_upload_url", params, false);
+      return textResult({ uploadUrl, expiresIn: ttl });
+    },
+  );
+
+  server.tool(
     "get_review",
     "Poll a review session. Status progresses: reviewing → completed. When completed, submission contains comments and draftComment decisions.",
     {

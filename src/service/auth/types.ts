@@ -26,6 +26,15 @@ export interface IdentityProvider {
   createdAt: Date;
 }
 
+export interface UploadToken {
+  token: string;
+  userId: string;
+  agentId?: string;
+  /** Epoch seconds */
+  expiresAt: number;
+  used: boolean;
+}
+
 export interface AuthCode {
   code: string;
   clientId: string;

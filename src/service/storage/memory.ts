@@ -1,5 +1,11 @@
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
-import type { User, AuthCode, RefreshTokenRecord, IdentityProvider } from "../auth/types.ts";
+import type {
+  User,
+  AuthCode,
+  RefreshTokenRecord,
+  IdentityProvider,
+  UploadToken,
+} from "../auth/types.ts";
 import type { Session, Storage, Upload } from "./interface.ts";
 
 export class MemoryStorage implements Storage {
@@ -8,6 +14,7 @@ export class MemoryStorage implements Storage {
   private users = new Map<string, User>();
   private usersByUsername = new Map<string, User>();
   private oauthClients = new Map<string, OAuthClientInformationFull>();
+  private uploadTokens = new Map<string, UploadToken>();
   private authCodes = new Map<string, AuthCode>();
   private refreshTokens = new Map<string, RefreshTokenRecord>();
   private identityProviders = new Map<string, IdentityProvider>();
@@ -107,6 +114,18 @@ export class MemoryStorage implements Storage {
     return this.oauthClients.get(clientId);
   }
 
+  // --- Auth: Upload tokens ---
+
+  async saveUploadToken(token: UploadToken): Promise<void> {
+    this.uploadTokens.set(token.token, token);
+  }
+
+  async consumeUploadToken(token: string): Promise<UploadToken | undefined> {
+    const t = this.uploadTokens.get(token);
+    if (t) this.uploadTokens.delete(token);
+    return t;
+  }
+
   // --- Auth: Authorization codes ---
 
   async saveAuthCode(authCode: AuthCode): Promise<void> {
@@ -139,6 +158,7 @@ export class MemoryStorage implements Storage {
     this.users.clear();
     this.usersByUsername.clear();
     this.oauthClients.clear();
+    this.uploadTokens.clear();
     this.authCodes.clear();
     this.refreshTokens.clear();
     this.identityProviders.clear();
