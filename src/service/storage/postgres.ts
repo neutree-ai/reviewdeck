@@ -1,6 +1,6 @@
 import postgres from "postgres";
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
-import type { User, AuthCode, RefreshTokenRecord } from "../auth/types.ts";
+import type { User, AuthCode, RefreshTokenRecord, IdentityProvider } from "../auth/types.ts";
 import type { Session, Storage, SubPatchRecord, Upload } from "./interface.ts";
 
 export class PostgresStorage implements Storage {
@@ -40,10 +40,29 @@ export class PostgresStorage implements Storage {
     `;
     await this.sql`
       CREATE TABLE IF NOT EXISTS users (
-        id              TEXT PRIMARY KEY,
-        username        TEXT NOT NULL UNIQUE,
-        password_hash   TEXT NOT NULL,
-        created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+        id                TEXT PRIMARY KEY,
+        username          TEXT NOT NULL UNIQUE,
+        password_hash     TEXT,
+        external_provider TEXT,
+        external_id       TEXT,
+        display_name      TEXT,
+        email             TEXT,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await this.sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_external
+        ON users (external_provider, external_id)
+        WHERE external_provider IS NOT NULL
+    `;
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS identity_providers (
+        id            TEXT PRIMARY KEY,
+        display_name  TEXT NOT NULL,
+        type          TEXT NOT NULL,
+        config        JSONB NOT NULL,
+        enabled       BOOLEAN NOT NULL DEFAULT true,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
       )
     `;
     await this.sql`
@@ -176,23 +195,70 @@ export class PostgresStorage implements Storage {
 
   async saveUser(user: User): Promise<void> {
     await this.sql`
-      INSERT INTO users (id, username, password_hash, created_at)
-      VALUES (${user.id}, ${user.username}, ${user.passwordHash}, ${user.createdAt})
+      INSERT INTO users (id, username, password_hash, external_provider, external_id, display_name, email, created_at)
+      VALUES (${user.id}, ${user.username}, ${user.passwordHash ?? null}, ${user.externalProvider ?? null}, ${user.externalId ?? null}, ${user.displayName ?? null}, ${user.email ?? null}, ${user.createdAt})
     `;
   }
 
   async getUserById(id: string): Promise<User | undefined> {
     const rows = await this
-      .sql`SELECT id, username, password_hash, created_at FROM users WHERE id = ${id}`;
+      .sql`SELECT id, username, password_hash, external_provider, external_id, display_name, email, created_at FROM users WHERE id = ${id}`;
     if (rows.length === 0) return undefined;
     return this.rowToUser(rows[0]!);
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const rows = await this
-      .sql`SELECT id, username, password_hash, created_at FROM users WHERE username = ${username}`;
+      .sql`SELECT id, username, password_hash, external_provider, external_id, display_name, email, created_at FROM users WHERE username = ${username}`;
     if (rows.length === 0) return undefined;
     return this.rowToUser(rows[0]!);
+  }
+
+  async getUserByExternalId(provider: string, externalId: string): Promise<User | undefined> {
+    const rows = await this
+      .sql`SELECT id, username, password_hash, external_provider, external_id, display_name, email, created_at FROM users WHERE external_provider = ${provider} AND external_id = ${externalId}`;
+    if (rows.length === 0) return undefined;
+    return this.rowToUser(rows[0]!);
+  }
+
+  // --- Auth: Identity providers ---
+
+  async saveIdentityProvider(idp: IdentityProvider): Promise<void> {
+    const config = {
+      issuerUrl: idp.issuerUrl,
+      authorizeUrl: idp.authorizeUrl,
+      tokenUrl: idp.tokenUrl,
+      userinfoUrl: idp.userinfoUrl,
+      clientId: idp.clientId,
+      clientSecret: idp.clientSecret,
+      scopes: idp.scopes,
+      userIdClaim: idp.userIdClaim,
+      usernameClaim: idp.usernameClaim,
+    };
+    await this.sql`
+      INSERT INTO identity_providers (id, display_name, type, config, enabled, created_at)
+      VALUES (${idp.id}, ${idp.displayName}, ${idp.type}, ${this.sql.json(config)}, ${idp.enabled}, ${idp.createdAt})
+      ON CONFLICT (id) DO UPDATE SET
+        display_name = ${idp.displayName}, type = ${idp.type},
+        config = ${this.sql.json(config)}, enabled = ${idp.enabled}
+    `;
+  }
+
+  async getIdentityProvider(id: string): Promise<IdentityProvider | undefined> {
+    const rows = await this
+      .sql`SELECT id, display_name, type, config, enabled, created_at FROM identity_providers WHERE id = ${id}`;
+    if (rows.length === 0) return undefined;
+    return this.rowToIdp(rows[0]!);
+  }
+
+  async listIdentityProviders(): Promise<IdentityProvider[]> {
+    const rows = await this
+      .sql`SELECT id, display_name, type, config, enabled, created_at FROM identity_providers WHERE enabled = true ORDER BY created_at`;
+    return rows.map((row) => this.rowToIdp(row));
+  }
+
+  async deleteIdentityProvider(id: string): Promise<void> {
+    await this.sql`DELETE FROM identity_providers WHERE id = ${id}`;
   }
 
   // --- Auth: OAuth clients ---
@@ -272,11 +338,35 @@ export class PostgresStorage implements Storage {
     await this.sql.end();
   }
 
+  private rowToIdp(row: Record<string, any>): IdentityProvider {
+    const config = row.config as Record<string, any>;
+    return {
+      id: row.id,
+      displayName: row.display_name,
+      type: row.type,
+      issuerUrl: config.issuerUrl ?? undefined,
+      authorizeUrl: config.authorizeUrl ?? undefined,
+      tokenUrl: config.tokenUrl ?? undefined,
+      userinfoUrl: config.userinfoUrl ?? undefined,
+      clientId: config.clientId,
+      clientSecret: config.clientSecret ?? undefined,
+      scopes: config.scopes ?? [],
+      userIdClaim: config.userIdClaim ?? "sub",
+      usernameClaim: config.usernameClaim ?? "preferred_username",
+      enabled: row.enabled,
+      createdAt: new Date(row.created_at),
+    };
+  }
+
   private rowToUser(row: Record<string, any>): User {
     return {
       id: row.id,
       username: row.username,
-      passwordHash: row.password_hash,
+      passwordHash: row.password_hash ?? undefined,
+      externalProvider: row.external_provider ?? undefined,
+      externalId: row.external_id ?? undefined,
+      displayName: row.display_name ?? undefined,
+      email: row.email ?? undefined,
       createdAt: new Date(row.created_at),
     };
   }

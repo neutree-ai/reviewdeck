@@ -5,10 +5,12 @@ import { readFile, stat } from "node:fs/promises";
 import { mcpAuthRouter } from "@hono/mcp/auth";
 import type { Storage } from "./storage/interface.ts";
 import { createReviewRoutes } from "./routes/reviews.ts";
+import { createIdpRoutes } from "./routes/idp.ts";
 import { createHealthRoutes } from "./routes/health.ts";
 import { createMcpRouter } from "./mcp/transport.ts";
 import { ReviewDeckOAuthProvider } from "./auth/provider.ts";
 import { createConsentRouter } from "./auth/consent.ts";
+import { createUpstreamRouter } from "./auth/upstream.ts";
 import { createApiAuthMiddleware, createOAuthMiddleware } from "./auth/middleware.ts";
 import { initSigningKey } from "./auth/token.ts";
 
@@ -78,6 +80,7 @@ export async function startServer(opts: ServerOptions): Promise<void> {
 
   // Login / register / consent pages
   app.route("/auth", createConsentRouter(storage, provider));
+  app.route("/auth/sso", createUpstreamRouter(storage, provider, baseUrl));
 
   // Auth middleware on /api/* and /mcp*
   app.use("/api/*", createApiAuthMiddleware(provider));
@@ -85,6 +88,7 @@ export async function startServer(opts: ServerOptions): Promise<void> {
 
   // Mount API routes
   app.route("/api", createReviewRoutes(storage, baseUrl));
+  app.route("/api", createIdpRoutes(storage));
   app.route("/", createHealthRoutes());
   app.route("/mcp", createMcpRouter(storage, baseUrl));
 

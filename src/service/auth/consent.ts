@@ -73,7 +73,7 @@ export function createConsentRouter(storage: Storage, provider: ReviewDeckOAuthP
   const app = new Hono();
 
   // --- Login / Register page ---
-  app.get("/login", (c) => {
+  app.get("/login", async (c) => {
     const req = c.req.query("req") ?? "";
     const mode = c.req.query("mode") ?? "login";
     const error = c.req.query("error");
@@ -81,10 +81,26 @@ export function createConsentRouter(storage: Storage, provider: ReviewDeckOAuthP
     const isRegister = mode === "register";
     const toggleUrl = `/auth/login?req=${encodeURIComponent(req)}&mode=${isRegister ? "login" : "register"}`;
 
+    // Load configured identity providers for SSO buttons
+    const idps = await storage.listIdentityProviders();
+    const ssoButtons = idps
+      .map(
+        (idp) =>
+          `<a href="/auth/sso/start?idp=${encodeURIComponent(idp.id)}&req=${encodeURIComponent(req)}" class="btn btn-secondary" style="width:100%;text-align:center;margin-bottom:0.5rem">${escapeHtml(idp.displayName)}</a>`,
+      )
+      .join("\n");
+
+    const divider =
+      idps.length > 0
+        ? '<div style="text-align:center;color:#999;margin:1rem 0;font-size:0.8rem">── or ──</div>'
+        : "";
+
     return c.html(
       page(
         `<h1>${isRegister ? "Register" : "Sign in"} to ReviewDeck</h1>
         ${error ? `<div class="error">${escapeHtml(error)}</div>` : ""}
+        ${ssoButtons}
+        ${divider}
         <form method="POST" action="/auth/login">
           <input type="hidden" name="req" value="${escapeAttr(req)}">
           <input type="hidden" name="mode" value="${isRegister ? "register" : "login"}">
@@ -143,6 +159,8 @@ export function createConsentRouter(storage: Storage, provider: ReviewDeckOAuthP
     } else {
       const user = await storage.getUserByUsername(username);
       if (!user) return errorRedirect("Invalid username or password");
+      if (!user.passwordHash)
+        return errorRedirect("This account uses SSO. Please sign in with your identity provider.");
       const valid = await verifyPassword(password, user.passwordHash);
       if (!valid) return errorRedirect("Invalid username or password");
       userId = user.id;

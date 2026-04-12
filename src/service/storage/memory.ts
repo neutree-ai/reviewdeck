@@ -1,5 +1,5 @@
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
-import type { User, AuthCode, RefreshTokenRecord } from "../auth/types.ts";
+import type { User, AuthCode, RefreshTokenRecord, IdentityProvider } from "../auth/types.ts";
 import type { Session, Storage, Upload } from "./interface.ts";
 
 export class MemoryStorage implements Storage {
@@ -10,6 +10,8 @@ export class MemoryStorage implements Storage {
   private oauthClients = new Map<string, OAuthClientInformationFull>();
   private authCodes = new Map<string, AuthCode>();
   private refreshTokens = new Map<string, RefreshTokenRecord>();
+  private identityProviders = new Map<string, IdentityProvider>();
+  private usersByExternalId = new Map<string, User>();
 
   async saveUpload(upload: Upload): Promise<void> {
     this.uploads.set(upload.id, upload);
@@ -60,6 +62,9 @@ export class MemoryStorage implements Storage {
   async saveUser(user: User): Promise<void> {
     this.users.set(user.id, user);
     this.usersByUsername.set(user.username, user);
+    if (user.externalProvider && user.externalId) {
+      this.usersByExternalId.set(`${user.externalProvider}:${user.externalId}`, user);
+    }
   }
 
   async getUserById(id: string): Promise<User | undefined> {
@@ -68,6 +73,28 @@ export class MemoryStorage implements Storage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     return this.usersByUsername.get(username);
+  }
+
+  async getUserByExternalId(provider: string, externalId: string): Promise<User | undefined> {
+    return this.usersByExternalId.get(`${provider}:${externalId}`);
+  }
+
+  // --- Auth: Identity providers ---
+
+  async saveIdentityProvider(idp: IdentityProvider): Promise<void> {
+    this.identityProviders.set(idp.id, idp);
+  }
+
+  async getIdentityProvider(id: string): Promise<IdentityProvider | undefined> {
+    return this.identityProviders.get(id);
+  }
+
+  async listIdentityProviders(): Promise<IdentityProvider[]> {
+    return [...this.identityProviders.values()].filter((idp) => idp.enabled);
+  }
+
+  async deleteIdentityProvider(id: string): Promise<void> {
+    this.identityProviders.delete(id);
   }
 
   // --- Auth: OAuth clients ---
@@ -114,5 +141,7 @@ export class MemoryStorage implements Storage {
     this.oauthClients.clear();
     this.authCodes.clear();
     this.refreshTokens.clear();
+    this.identityProviders.clear();
+    this.usersByExternalId.clear();
   }
 }

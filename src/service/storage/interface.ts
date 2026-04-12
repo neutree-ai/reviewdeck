@@ -1,5 +1,5 @@
 import type { ReviewSubmission, SplitMeta } from "../../core/types.ts";
-import type { User, AuthCode, RefreshTokenRecord } from "../auth/types.ts";
+import type { User, AuthCode, RefreshTokenRecord, IdentityProvider } from "../auth/types.ts";
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
 
 export interface SubPatchRecord {
@@ -58,6 +58,13 @@ export interface Storage {
   saveUser(user: User): Promise<void>;
   getUserById(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByExternalId(provider: string, externalId: string): Promise<User | undefined>;
+
+  // --- Auth: Identity providers ---
+  saveIdentityProvider(idp: IdentityProvider): Promise<void>;
+  getIdentityProvider(id: string): Promise<IdentityProvider | undefined>;
+  listIdentityProviders(): Promise<IdentityProvider[]>;
+  deleteIdentityProvider(id: string): Promise<void>;
 
   // --- Auth: OAuth clients ---
   saveOAuthClient(client: OAuthClientInformationFull): Promise<void>;
