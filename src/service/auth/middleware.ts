@@ -3,7 +3,7 @@ import type { ReviewDeckOAuthProvider } from "./provider.ts";
 
 /**
  * OAuth Bearer token middleware for API and MCP routes.
- * Verifies the JWT access token and sets `auth` and `caller` on the context.
+ * Verifies the JWT access token and sets `auth` and `userId` on the context.
  */
 export function createOAuthMiddleware(provider: ReviewDeckOAuthProvider) {
   return async (c: Context, next: Next) => {
@@ -15,7 +15,7 @@ export function createOAuthMiddleware(provider: ReviewDeckOAuthProvider) {
     try {
       const authInfo = await provider.verifyAccessToken(token);
       c.set("auth", authInfo);
-      c.set("caller", (authInfo.extra?.username as string) ?? authInfo.clientId);
+      c.set("userId", (authInfo.extra?.userId as string) ?? "");
       return next();
     } catch {
       return c.json({ error: "Invalid or expired token" }, 401);

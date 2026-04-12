@@ -41,7 +41,7 @@ export function registerTools(
   server: McpServer,
   storage: Storage,
   baseUrl: string,
-  caller: string,
+  userId: string,
 ): void {
   server.tool(
     "create_review",
@@ -59,6 +59,7 @@ export function registerTools(
           ),
         })
         .describe("Split metadata with groups"),
+      agentId: z.string().optional().describe("Optional agent identifier for session isolation"),
     },
     async (params) => {
       const upload = await storage.getUpload(params.diffFileId);
@@ -101,7 +102,8 @@ export function registerTools(
           id: randomUUID(),
           reviewToken: randomUUID(),
           status: "reviewing",
-          caller,
+          userId,
+          agentId: params.agentId,
           splitMeta,
           subPatches,
           submission: null,

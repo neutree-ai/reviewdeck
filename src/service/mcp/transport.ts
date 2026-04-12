@@ -12,11 +12,11 @@ export function createMcpRouter(storage: Storage, baseUrl: string): Hono {
   const router = new Hono();
 
   router.all("/", async (c) => {
-    const caller = (c.get("caller") as string) ?? "anonymous";
-    console.error(`[mcp] ${c.req.method} ${c.req.path} caller=${caller}`);
+    const userId = (c.get("userId") as string) ?? "";
+    console.error(`[mcp] ${c.req.method} ${c.req.path} userId=${userId}`);
 
     const server = new McpServer({ name: "reviewdeck", version: "0.4.0" });
-    registerTools(server, storage, baseUrl, caller);
+    registerTools(server, storage, baseUrl, userId);
 
     const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined });
     await server.connect(transport);

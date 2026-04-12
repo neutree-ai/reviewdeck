@@ -34,11 +34,12 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
   // Create a review session from an uploaded diff + split metadata
   // -----------------------------------------------------------------------
   app.post("/reviews", async (c) => {
-    const { fileId, splitMeta } = await c.req.json<{
+    const { fileId, splitMeta, agentId } = await c.req.json<{
       fileId: string;
       splitMeta: SplitMeta;
+      agentId?: string;
     }>();
-    const caller = (c.get("caller") as string) ?? "anonymous";
+    const userId = (c.get("userId") as string) ?? "";
 
     const upload = await storage.getUpload(fileId);
     if (!upload) return c.json({ error: "Upload not found" }, 404);
@@ -71,7 +72,8 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
       id: randomUUID(),
       reviewToken: randomUUID(),
       status: "reviewing",
-      caller: caller ?? "anonymous",
+      userId,
+      agentId,
       splitMeta,
       subPatches,
       submission: null,
@@ -104,7 +106,8 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
     return c.json({
       sessionId: session.id,
       status: session.status,
-      caller: session.caller,
+      userId: session.userId,
+      agentId: session.agentId,
       patchCount: session.subPatches.length,
       reviewUrl: `${baseUrl}/review/${session.id}?token=${session.reviewToken}`,
       submission: session.submission,
@@ -117,13 +120,19 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
   // List sessions
   // -----------------------------------------------------------------------
   app.get("/sessions", async (c) => {
-    const caller = (c.get("caller") as string) ?? "anonymous";
-    const sessions = await storage.listSessions(caller === "anonymous" ? undefined : caller);
+    const userId = (c.get("userId") as string) ?? "";
+    const agentId = c.req.query("agentId");
+    const all = c.req.query("all") === "true";
+
+    const filter = all ? { userId } : { userId, agentId: agentId ?? undefined };
+    const sessions = await storage.listSessions(userId ? filter : undefined);
+
     return c.json(
       sessions.map((s) => ({
         sessionId: s.id,
         status: s.status,
-        caller: s.caller,
+        userId: s.userId,
+        agentId: s.agentId,
         reviewUrl: `${baseUrl}/review/${s.id}?token=${s.reviewToken}`,
         patchCount: s.subPatches.length,
         createdAt: s.createdAt,

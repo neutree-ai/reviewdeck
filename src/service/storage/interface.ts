@@ -21,8 +21,10 @@ export interface Session {
   /** Scoped token for browser access to this session */
   reviewToken: string;
   status: "pending" | "reviewing" | "completed";
-  /** Who requested this review (e.g. agent name, API key identifier) */
-  caller: string;
+  /** Authenticated user who owns this session */
+  userId: string;
+  /** Optional agent identifier declared by the caller */
+  agentId?: string;
   splitMeta: SplitMeta;
   subPatches: SubPatchRecord[];
   submission: ReviewSubmission | null;
@@ -50,7 +52,7 @@ export interface Storage {
     id: string,
     updates: Partial<Pick<Session, "status" | "submission" | "subPatches" | "updatedAt">>,
   ): Promise<Session | undefined>;
-  listSessions(caller?: string): Promise<Session[]>;
+  listSessions(filter?: { userId?: string; agentId?: string }): Promise<Session[]>;
 
   // --- Auth: Users ---
   saveUser(user: User): Promise<void>;

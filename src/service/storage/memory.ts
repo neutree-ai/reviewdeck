@@ -48,9 +48,10 @@ export class MemoryStorage implements Storage {
     return session;
   }
 
-  async listSessions(caller?: string): Promise<Session[]> {
-    const all = [...this.sessions.values()];
-    if (caller) return all.filter((s) => s.caller === caller);
+  async listSessions(filter?: { userId?: string; agentId?: string }): Promise<Session[]> {
+    let all = [...this.sessions.values()];
+    if (filter?.userId) all = all.filter((s) => s.userId === filter.userId);
+    if (filter?.agentId) all = all.filter((s) => s.agentId === filter.agentId);
     return all;
   }
 
