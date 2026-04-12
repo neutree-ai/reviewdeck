@@ -15,7 +15,7 @@ export function createMcpRouter(storage: Storage, baseUrl: string): Hono {
     const userId = (c.get("userId") as string) ?? "";
     console.error(`[mcp] ${c.req.method} ${c.req.path} userId=${userId}`);
 
-    const server = new McpServer({ name: "reviewdeck", version: "0.5.0" });
+    const server = new McpServer({ name: "reviewdeck", version: "0.5.1" });
     registerTools(server, storage, baseUrl, userId);
 
     const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined });
