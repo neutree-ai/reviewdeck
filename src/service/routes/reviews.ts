@@ -34,12 +34,17 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
   // Create a review session from an uploaded diff + split metadata
   // -----------------------------------------------------------------------
   app.post("/reviews", async (c) => {
-    const { fileId, splitMeta, agentId } = await c.req.json<{
+    const {
+      fileId,
+      splitMeta,
+      agentId: bodyAgentId,
+    } = await c.req.json<{
       fileId: string;
       splitMeta: SplitMeta;
       agentId?: string;
     }>();
     const userId = (c.get("userId") as string) ?? "";
+    const agentId = bodyAgentId ?? c.req.header("x-agent-id");
 
     const upload = await storage.getUpload(fileId);
     if (!upload) return c.json({ error: "Upload not found" }, 404);
