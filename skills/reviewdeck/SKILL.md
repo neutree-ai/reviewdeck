@@ -4,7 +4,7 @@ description: Split a large PR diff into reviewable sub-patches for easier code r
 compatibility: Requires Node.js 18+ and npx (or the reviewdeck CLI installed globally).
 metadata:
   author: yanzhen
-  version: "0.4"
+  version: "0.5"
 ---
 
 # Reviewdeck
@@ -15,7 +15,7 @@ Default posture:
 
 - If the user wants PR review help, do not stop after `split`. Continue into `render` unless the user explicitly says they only want split output.
 - Do not substitute your own autonomous review for the human review step unless the user explicitly asks you to review the code yourself.
-- When invoking the CLI via `npx`, use `npx reviewdeck@^0.4.0 ...`.
+- When invoking the CLI via `npx`, use `npx reviewdeck@^0.5.0 ...`.
 
 ## Main Path
 
@@ -52,7 +52,7 @@ git diff --cached > pr.diff
 ### 2. Index changes
 
 ```bash
-npx reviewdeck@^0.4.0 index pr.diff
+npx reviewdeck@^0.5.0 index pr.diff
 ```
 
 This prints a numbered list of changed lines. Those indices are the units you group in the split metadata.
@@ -103,13 +103,13 @@ If you need heavier guidance for grouping, description writing, or draft comment
 ### 5. Split and verify
 
 ```bash
-echo '<meta JSON>' | npx reviewdeck@^0.4.0 split pr.diff -
+echo '<meta JSON>' | npx reviewdeck@^0.5.0 split pr.diff -
 ```
 
 Or write files:
 
 ```bash
-echo '<meta JSON>' | npx reviewdeck@^0.4.0 split pr.diff - -o output/
+echo '<meta JSON>' | npx reviewdeck@^0.5.0 split pr.diff - -o output/
 ```
 
 This validates the metadata, generates sub-patches, and verifies that they compose back to the original diff.
@@ -121,13 +121,13 @@ If `split` fails, read the error, fix the metadata JSON, and retry.
 After `split` succeeds, the default next step is live review:
 
 ```bash
-npx reviewdeck@^0.4.0 render output/
+npx reviewdeck@^0.5.0 render output/
 ```
 
 Or from stdin:
 
 ```bash
-echo '<meta JSON>' | npx reviewdeck@^0.4.0 split pr.diff - | npx reviewdeck@^0.4.0 render -
+echo '<meta JSON>' | npx reviewdeck@^0.5.0 split pr.diff - | npx reviewdeck@^0.5.0 render -
 ```
 
 The server opens a browser, blocks until submission, and prints a review submission JSON object to stdout.
