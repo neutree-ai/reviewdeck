@@ -42,6 +42,7 @@ export function registerTools(
   storage: Storage,
   baseUrl: string,
   userId: string,
+  headerAgentId?: string,
 ): void {
   server.tool(
     "create_review",
@@ -103,7 +104,7 @@ export function registerTools(
           reviewToken: randomUUID(),
           status: "reviewing",
           userId,
-          agentId: params.agentId,
+          agentId: params.agentId ?? headerAgentId,
           splitMeta,
           subPatches,
           submission: null,
@@ -143,7 +144,7 @@ export function registerTools(
       await storage.saveUploadToken({
         token,
         userId,
-        agentId: params.agentId,
+        agentId: params.agentId ?? headerAgentId,
         expiresAt: Math.floor(Date.now() / 1000) + ttl,
         used: false,
       });

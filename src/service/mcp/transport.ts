@@ -13,10 +13,11 @@ export function createMcpRouter(storage: Storage, baseUrl: string): Hono {
 
   router.all("/", async (c) => {
     const userId = (c.get("userId") as string) ?? "";
-    console.error(`[mcp] ${c.req.method} ${c.req.path} userId=${userId}`);
+    const headerAgentId = c.req.header("x-agent-id");
+    console.error(`[mcp] ${c.req.method} ${c.req.path} userId=${userId} agentId=${headerAgentId ?? "-"}`);
 
     const server = new McpServer({ name: "reviewdeck", version: "0.5.2" });
-    registerTools(server, storage, baseUrl, userId);
+    registerTools(server, storage, baseUrl, userId, headerAgentId);
 
     const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined });
     await server.connect(transport);
