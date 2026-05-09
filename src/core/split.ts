@@ -534,7 +534,11 @@ function fixHunkLineNumbers(hunks: string[]): string[] {
     const srcStart = parseInt(m[1]!);
     const srcCount = parseInt(m[2]!);
     const afterCount = parseInt(m[4]!);
-    const dstStart = srcStart + dstOffset;
+    // Unified diff is 1-indexed on the destination side. When the source
+    // side is empty (-0,0 — i.e. a new file's first hunk in its first
+    // group), the destination must start at line 1, not line 0.
+    const dstBase = srcStart === 0 && srcCount === 0 ? 1 : srcStart;
+    const dstStart = dstBase + dstOffset;
 
     lines[0] = `@@ -${srcStart},${srcCount} +${dstStart},${afterCount} @@`;
     result.push(lines.join("\n"));

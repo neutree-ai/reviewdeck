@@ -445,6 +445,28 @@ ${lines}
       state = applyPatch(state, parsePatch(sub));
     }
     expect(state).toEqual(expected);
+
+    // Hunk header for the new file's first group must use "+1,N" (line numbers
+    // are 1-based). "+0,N" is non-conformant and trips strict diff parsers.
+    expect(subs[0]).toContain("@@ -0,0 +1,10 @@");
+    expect(subs[0]).not.toMatch(/@@ -\d+,\d+ \+0,\d+ @@/);
+  });
+
+  it("emits +1,N for new file kept in a single group", () => {
+    const lines = Array.from({ length: 5 }, (_, i) => `+x${i}`).join("\n");
+    const original = `diff --git a/x.go b/x.go
+new file mode 100644
+--- /dev/null
++++ b/x.go
+@@ -0,0 +1,5 @@
+${lines}
+`;
+    const meta: SplitMeta = {
+      groups: [{ description: "all", changes: ["0-4"] }],
+    };
+    const subs = generateSubPatches(original, meta);
+    expect(subs[0]).toContain("@@ -0,0 +1,5 @@");
+    expect(subs[0]).not.toContain("+0,5");
   });
 
   it("splits new file across three groups", () => {
