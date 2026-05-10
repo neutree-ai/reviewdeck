@@ -420,6 +420,10 @@ function FileDiffView({
       diffStyle,
       diffIndicators: "classic" as const,
       lineDiffType: "word" as const,
+      // Force WASM Oniguruma. The default `shiki-js` engine has catastrophic
+      // backtracking on Go struct tags + interface{} — see
+      // https://github.com/shikijs/textmate-grammars-themes/issues/182
+      preferredHighlighter: "shiki-wasm" as const,
       expandUnchanged: true,
       enableGutterUtility: true,
       enableLineSelection: true,
