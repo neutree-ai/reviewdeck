@@ -6,6 +6,7 @@ import {
   MessageSquare,
   Columns2,
   Rows3,
+  WrapText,
   ArrowUp,
   Check,
   Eye,
@@ -27,6 +28,7 @@ import type {
 } from "../../../core/types";
 
 const DIFF_STYLE_STORAGE_KEY = "reviewdeck:review:diff-style";
+const DIFF_WRAP_STORAGE_KEY = "reviewdeck:review:diff-wrap";
 
 export interface SubPatch {
   index: number;
@@ -361,6 +363,7 @@ function FileDiffView({
   comments,
   draftComments,
   diffStyle,
+  wrap,
   viewed,
   onAddComment,
   onDeleteComment,
@@ -371,6 +374,7 @@ function FileDiffView({
   comments: ManualComment[];
   draftComments: AgentDraftCommentDecision[];
   diffStyle: "unified" | "split";
+  wrap: boolean;
   viewed: boolean;
   onAddComment: (comment: Omit<ManualComment, "sub" | "source">) => void;
   onDeleteComment: (commentIndex: number) => void;
@@ -418,6 +422,7 @@ function FileDiffView({
     () => ({
       theme: { dark: "github-dark", light: "github-light" } as const,
       diffStyle,
+      overflow: (wrap ? "wrap" : "scroll") as "wrap" | "scroll",
       diffIndicators: "classic" as const,
       lineDiffType: "word" as const,
       // Force WASM Oniguruma. The default `shiki-js` engine has catastrophic
@@ -437,7 +442,7 @@ function FileDiffView({
         });
       },
     }),
-    [diffStyle, viewed],
+    [diffStyle, wrap, viewed],
   );
 
   const renderAnnotation = useCallback(
@@ -541,6 +546,7 @@ function SubPatchView({
   comments,
   draftComments,
   diffStyle,
+  wrap,
   viewedFiles,
   onAddComment,
   onDeleteComment,
@@ -551,6 +557,7 @@ function SubPatchView({
   comments: ManualComment[];
   draftComments: AgentDraftCommentDecision[];
   diffStyle: "unified" | "split";
+  wrap: boolean;
   viewedFiles: Set<string>;
   onAddComment: (comment: Omit<ManualComment, "sub" | "source">) => void;
   onDeleteComment: (commentIndex: number) => void;
@@ -635,6 +642,7 @@ function SubPatchView({
             comments={comments}
             draftComments={draftComments}
             diffStyle={diffStyle}
+            wrap={wrap}
             viewed={viewedFiles.has(fd.name)}
             onAddComment={onAddComment}
             onDeleteComment={onDeleteComment}
@@ -660,6 +668,10 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
     const stored = window.localStorage.getItem(DIFF_STYLE_STORAGE_KEY);
     return stored === "unified" || stored === "split" ? stored : "split";
   });
+  const [wrap, setWrap] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(DIFF_WRAP_STORAGE_KEY) === "1";
+  });
   const [submitted, setSubmitted] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [viewedFiles, setViewedFiles] = useState<Map<number, Set<string>>>(new Map());
@@ -680,6 +692,10 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
   useEffect(() => {
     window.localStorage.setItem(DIFF_STYLE_STORAGE_KEY, diffStyle);
   }, [diffStyle]);
+
+  useEffect(() => {
+    window.localStorage.setItem(DIFF_WRAP_STORAGE_KEY, wrap ? "1" : "0");
+  }, [wrap]);
 
   const addComment = useCallback(
     (subIndex: number, comment: Omit<ManualComment, "sub" | "source">) => {
@@ -835,33 +851,48 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
               {patches.length} patches
             </p>
           </div>
-          <div className="inline-flex rounded-md border border-border bg-background/70 p-1 shadow-[0_1px_2px_oklch(0/0/0/0.12)]">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <button
-              onClick={() => setDiffStyle("split")}
+              onClick={() => setWrap((w) => !w)}
               className={cn(
-                "flex items-center gap-1.5 rounded px-2.5 py-1.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider transition-colors",
-                diffStyle === "split"
+                "flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider shadow-[0_1px_2px_oklch(0/0/0/0.12)] transition-colors",
+                wrap
                   ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-surface hover:text-foreground",
+                  : "bg-background/70 text-muted-foreground hover:bg-surface hover:text-foreground",
               )}
-              title="Use split diff view"
+              title={wrap ? "Disable line wrap" : "Wrap long lines"}
             >
-              <Columns2 className="size-3" />
-              Split
+              <WrapText className="size-3" />
+              Wrap
             </button>
-            <button
-              onClick={() => setDiffStyle("unified")}
-              className={cn(
-                "flex items-center gap-1.5 rounded px-2.5 py-1.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider transition-colors",
-                diffStyle === "unified"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-surface hover:text-foreground",
-              )}
-              title="Use unified diff view"
-            >
-              <Rows3 className="size-3" />
-              Unified
-            </button>
+            <div className="inline-flex rounded-md border border-border bg-background/70 p-1 shadow-[0_1px_2px_oklch(0/0/0/0.12)]">
+              <button
+                onClick={() => setDiffStyle("split")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded px-2.5 py-1.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider transition-colors",
+                  diffStyle === "split"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-surface hover:text-foreground",
+                )}
+                title="Use split diff view"
+              >
+                <Columns2 className="size-3" />
+                Split
+              </button>
+              <button
+                onClick={() => setDiffStyle("unified")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded px-2.5 py-1.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider transition-colors",
+                  diffStyle === "unified"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-surface hover:text-foreground",
+                )}
+                title="Use unified diff view"
+              >
+                <Rows3 className="size-3" />
+                Unified
+              </button>
+            </div>
           </div>
         </div>
 
@@ -972,6 +1003,7 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
               comments={activeCommentsRaw}
               draftComments={activeDraftComments}
               diffStyle={diffStyle}
+              wrap={wrap}
               viewedFiles={activeViewedSet}
               onAddComment={(comment) => addComment(activeSub, comment)}
               onDeleteComment={handleDeleteComment}
