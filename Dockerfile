@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 node:22 AS build
+FROM --platform=linux/amd64 node:24 AS build
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ COPY skills/ skills/
 RUN npm run build
 
 # --- Runtime ---
-FROM --platform=linux/amd64 node:22-slim
+FROM --platform=linux/amd64 node:24-slim
 
 WORKDIR /app
 
