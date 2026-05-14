@@ -38,13 +38,16 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
       fileId,
       splitMeta,
       agentId: bodyAgentId,
+      agentSessionId: bodyAgentSessionId,
     } = await c.req.json<{
       fileId: string;
       splitMeta: SplitMeta;
       agentId?: string;
+      agentSessionId?: string;
     }>();
     const userId = (c.get("userId") as string) ?? "";
     const agentId = bodyAgentId ?? c.req.header("x-agent-id");
+    const agentSessionId = bodyAgentSessionId ?? c.req.header("x-session-id");
 
     const upload = await storage.getUpload(fileId);
     if (!upload) return c.json({ error: "Upload not found" }, 404);
@@ -79,6 +82,7 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
       status: "reviewing",
       userId,
       agentId,
+      agentSessionId,
       splitMeta,
       subPatches,
       submission: null,
@@ -113,6 +117,7 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
       status: session.status,
       userId: session.userId,
       agentId: session.agentId,
+      agentSessionId: session.agentSessionId,
       patchCount: session.subPatches.length,
       reviewUrl: `${baseUrl}/review/${session.id}?token=${session.reviewToken}`,
       submission: session.submission,
@@ -127,9 +132,16 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
   app.get("/sessions", async (c) => {
     const userId = (c.get("userId") as string) ?? "";
     const agentId = c.req.query("agentId");
+    const agentSessionId = c.req.query("agentSessionId");
     const all = c.req.query("all") === "true";
 
-    const filter = all ? { userId } : { userId, agentId: agentId ?? undefined };
+    const filter = all
+      ? { userId }
+      : {
+          userId,
+          agentId: agentId ?? undefined,
+          agentSessionId: agentSessionId ?? undefined,
+        };
     const sessions = await storage.listSessions(userId ? filter : undefined);
 
     return c.json(
@@ -138,6 +150,7 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
         status: s.status,
         userId: s.userId,
         agentId: s.agentId,
+        agentSessionId: s.agentSessionId,
         reviewUrl: `${baseUrl}/review/${s.id}?token=${s.reviewToken}`,
         patchCount: s.subPatches.length,
         createdAt: s.createdAt,

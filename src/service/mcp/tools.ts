@@ -43,6 +43,7 @@ export function registerTools(
   baseUrl: string,
   userId: string,
   headerAgentId?: string,
+  headerAgentSessionId?: string,
 ): void {
   server.tool(
     "create_review",
@@ -105,6 +106,7 @@ export function registerTools(
           status: "reviewing",
           userId,
           agentId: params.agentId ?? headerAgentId,
+          agentSessionId: headerAgentSessionId,
           splitMeta,
           subPatches,
           submission: null,

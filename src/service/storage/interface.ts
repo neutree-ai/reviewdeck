@@ -31,6 +31,13 @@ export interface Session {
   userId: string;
   /** Optional agent identifier declared by the caller */
   agentId?: string;
+  /**
+   * Optional agent-side session this review belongs to, read from the
+   * `X-Session-Id` request header. Lets a hosting UI map a review back to
+   * the originating chat so parallel reviews can be routed independently
+   * instead of all targeting the most recent session on submit.
+   */
+  agentSessionId?: string;
   splitMeta: SplitMeta;
   subPatches: SubPatchRecord[];
   submission: ReviewSubmission | null;
@@ -58,7 +65,11 @@ export interface Storage {
     id: string,
     updates: Partial<Pick<Session, "status" | "submission" | "subPatches" | "updatedAt">>,
   ): Promise<Session | undefined>;
-  listSessions(filter?: { userId?: string; agentId?: string }): Promise<Session[]>;
+  listSessions(filter?: {
+    userId?: string;
+    agentId?: string;
+    agentSessionId?: string;
+  }): Promise<Session[]>;
 
   // --- Auth: Users ---
   saveUser(user: User): Promise<void>;
