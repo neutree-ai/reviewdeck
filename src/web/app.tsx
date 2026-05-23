@@ -10,10 +10,6 @@ function App() {
   const token = new URLSearchParams(window.location.search).get("token") ?? undefined;
 
   useEffect(() => {
-    if (!token) {
-      setError("No review token provided. Open a review URL with ?token=... to view patches.");
-      return;
-    }
     fetchPatches({ token })
       .then(setPatches)
       .catch((e) => setError(e.message));
