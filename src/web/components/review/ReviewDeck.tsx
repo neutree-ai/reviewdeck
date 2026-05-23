@@ -17,7 +17,6 @@ import {
   ChevronUp,
   ChevronDown,
   ListTree,
-  User,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
@@ -877,7 +876,6 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
   }, [comments, draftComments, patchFileOrder]);
 
   const [navCursor, setNavCursor] = useState<string | null>(null);
-  const [navListOpen, setNavListOpen] = useState(false);
   const [pendingScroll, setPendingScroll] = useState<NavEntry | null>(null);
 
   // Keep cursor pointing at something valid as entries change.
@@ -1054,6 +1052,15 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
           </div>
         )}
 
+        {navEntries.length > 0 && (
+          <CommentNavigatorRail
+            entries={navEntries}
+            cursorIndex={navCursorIndex}
+            onPrev={() => gotoStep(-1)}
+            onNext={() => gotoStep(1)}
+          />
+        )}
+
         <div className="rail-track stagger-children flex-1 overflow-y-auto px-2 py-2">
           {patches.map((patch) => {
             const subComments = comments.filter((comment) => comment.sub === patch.index);
@@ -1144,7 +1151,7 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
         </div>
       </nav>
 
-      <main className="relative flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto">
         <div className="p-6">
           {patches[activeSub] && (
             <SubPatchView
@@ -1162,17 +1169,6 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
             />
           )}
         </div>
-
-        <CommentNavigator
-          entries={navEntries}
-          cursorIndex={navCursorIndex}
-          patches={patches}
-          open={navListOpen}
-          onToggle={() => setNavListOpen((o) => !o)}
-          onPrev={() => gotoStep(-1)}
-          onNext={() => gotoStep(1)}
-          onJump={gotoEntry}
-        />
       </main>
     </div>
   );
@@ -1193,142 +1189,43 @@ type NavEntry = {
   body: string;
 };
 
-function navEntryDotClass(entry: NavEntry): string {
-  if (entry.kind === "human") return "bg-foreground/70";
-  if (entry.status === "accepted") return "bg-success";
-  if (entry.status === "rejected") return "bg-muted-foreground/40";
-  return "bg-primary";
-}
-
-function CommentNavigator({
+function CommentNavigatorRail({
   entries,
   cursorIndex,
-  patches,
-  open,
-  onToggle,
   onPrev,
   onNext,
-  onJump,
 }: {
   entries: NavEntry[];
   cursorIndex: number;
-  patches: SubPatch[];
-  open: boolean;
-  onToggle: () => void;
   onPrev: () => void;
   onNext: () => void;
-  onJump: (entry: NavEntry) => void;
 }) {
-  if (entries.length === 0) return null;
-
-  const grouped = useMemo(() => {
-    const map = new Map<number, NavEntry[]>();
-    entries.forEach((e) => {
-      const arr = map.get(e.sub) ?? [];
-      arr.push(e);
-      map.set(e.sub, arr);
-    });
-    return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
-  }, [entries]);
-
-  const counter = `${Math.max(cursorIndex, 0) + 1} / ${entries.length}`;
-
   return (
-    <div className="pointer-events-none sticky top-4 z-30 -mt-2 flex justify-end px-6">
-      <div className="pointer-events-auto flex flex-col items-end gap-2">
-        <div className="flex items-center gap-1 rounded-full border border-primary/40 bg-primary px-1.5 py-1 text-primary-foreground shadow-[0_4px_12px_oklch(0/0/0/0.3)]">
-          <button
-            onClick={onToggle}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-2.5 py-1 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider transition-colors",
-              open ? "bg-primary-foreground/15" : "hover:bg-primary-foreground/10",
-            )}
-            title="Toggle comment list"
-          >
-            <ListTree className="size-3" />
-            <span>{counter}</span>
-          </button>
+    <div className="flex items-center justify-between border-y border-border/60 bg-background/40 px-3 py-2">
+      <span className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+        <ListTree className="size-3" />
+        Comments
+      </span>
+      <div className="flex items-center gap-1.5">
+        <span className="font-[family-name:var(--font-mono)] text-[10px] text-muted-foreground">
+          {Math.max(cursorIndex, 0) + 1} / {entries.length}
+        </span>
+        <div className="flex items-center gap-0.5 rounded-md border border-primary/40 bg-primary px-0.5 py-0.5 text-primary-foreground">
           <button
             onClick={onPrev}
-            className="rounded-full p-1.5 transition-colors hover:bg-primary-foreground/10"
+            className="rounded p-0.5 transition-colors hover:bg-primary-foreground/15"
             title="Previous comment"
           >
             <ChevronUp className="size-3.5" />
           </button>
           <button
             onClick={onNext}
-            className="rounded-full p-1.5 transition-colors hover:bg-primary-foreground/10"
+            className="rounded p-0.5 transition-colors hover:bg-primary-foreground/15"
             title="Next comment"
           >
             <ChevronDown className="size-3.5" />
           </button>
         </div>
-
-        {open && (
-          <div className="animate-fade-in-up flex max-h-[60vh] w-[340px] flex-col overflow-hidden rounded-lg border border-border bg-card/95 shadow-[0_8px_24px_oklch(0/0/0/0.35)] backdrop-blur">
-            <div className="flex items-center justify-between border-b border-border px-3 py-2">
-              <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                Comments
-              </span>
-              <span className="font-[family-name:var(--font-mono)] text-[10px] text-muted-foreground">
-                {entries.length}
-              </span>
-            </div>
-            <div className="flex-1 overflow-y-auto py-1">
-              {grouped.map(([sub, items]) => (
-                <div key={sub} className="px-1 py-1">
-                  <div className="flex items-baseline gap-2 px-2 py-1">
-                    <span className="font-[family-name:var(--font-mono)] text-[10px] font-semibold tracking-widest text-primary">
-                      {String(sub + 1).padStart(2, "0")}
-                    </span>
-                    <span className="truncate text-[11px] text-muted-foreground">
-                      {patches[sub]?.description ?? `Patch ${sub + 1}`}
-                    </span>
-                  </div>
-                  {items.map((entry) => {
-                    const active = entries[cursorIndex]?.id === entry.id;
-                    return (
-                      <button
-                        key={entry.id}
-                        onClick={() => onJump(entry)}
-                        className={cn(
-                          "group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
-                          active ? "bg-surface" : "hover:bg-surface/60",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "mt-1.5 size-1.5 shrink-0 rounded-full",
-                            navEntryDotClass(entry),
-                          )}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[10px] text-muted-foreground">
-                            {entry.kind === "human" ? (
-                              <User className="size-2.5" />
-                            ) : (
-                              <Bot className="size-2.5" />
-                            )}
-                            <span className="truncate">{entry.file}</span>
-                            <span className="shrink-0">:{entry.line}</span>
-                          </span>
-                          <span
-                            className={cn(
-                              "mt-0.5 block truncate text-[12px]",
-                              active ? "text-foreground" : "text-muted-foreground/90",
-                            )}
-                          >
-                            {entry.body}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
