@@ -14,6 +14,10 @@ import {
   Bot,
   UserCheck,
   Ban,
+  ChevronUp,
+  ChevronDown,
+  ListTree,
+  User,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
@@ -44,10 +48,21 @@ export interface ReviewDeckProps {
 
 type ManualComment = ReviewComment & { source: "human" };
 
+type CommentEntry = { comment: ManualComment; globalIndex: number };
+
 type AnnotationMeta =
-  | { kind: "comment"; comment: ManualComment; commentIndex: number }
+  | {
+      kind: "comment";
+      comment: ManualComment;
+      commentIndex: number;
+      globalIndex: number;
+    }
   | { kind: "draft"; draft: AgentDraftCommentDecision }
   | { kind: "pending" };
+
+function annotationDomId(meta: Extract<AnnotationMeta, { kind: "comment" | "draft" }>): string {
+  return meta.kind === "comment" ? `manual-${meta.globalIndex}` : `draft-${meta.draft.id}`;
+}
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -360,7 +375,7 @@ function CommentStatusCard({
 
 function FileDiffView({
   fileDiff,
-  comments,
+  commentEntries,
   draftComments,
   diffStyle,
   wrap,
@@ -371,7 +386,7 @@ function FileDiffView({
   onToggleViewed,
 }: {
   fileDiff: FileDiffMetadata;
-  comments: ManualComment[];
+  commentEntries: CommentEntry[];
   draftComments: AgentDraftCommentDecision[];
   diffStyle: "unified" | "split";
   wrap: boolean;
@@ -389,12 +404,17 @@ function FileDiffView({
   const annotations: DiffLineAnnotation<AnnotationMeta>[] = useMemo(() => {
     const result: DiffLineAnnotation<AnnotationMeta>[] = [];
 
-    comments.forEach((comment, i) => {
-      if (comment.file !== fileDiff.name) return;
+    commentEntries.forEach((entry, i) => {
+      if (entry.comment.file !== fileDiff.name) return;
       result.push({
-        side: comment.side,
-        lineNumber: comment.line,
-        metadata: { kind: "comment", comment, commentIndex: i },
+        side: entry.comment.side,
+        lineNumber: entry.comment.line,
+        metadata: {
+          kind: "comment",
+          comment: entry.comment,
+          commentIndex: i,
+          globalIndex: entry.globalIndex,
+        },
       });
     });
 
@@ -416,7 +436,7 @@ function FileDiffView({
     }
 
     return result;
-  }, [comments, draftComments, fileDiff.name, pendingLine]);
+  }, [commentEntries, draftComments, fileDiff.name, pendingLine]);
 
   const options = useMemo(
     () => ({
@@ -464,20 +484,24 @@ function FileDiffView({
         );
       }
 
-      if (ann.metadata.kind === "draft") {
-        return (
+      const meta = ann.metadata;
+      const inner =
+        meta.kind === "draft" ? (
           <DraftCommentBubble
-            draft={ann.metadata.draft}
-            onSetStatus={(status) => onSetDraftStatus(ann.metadata.draft.id, status)}
+            draft={meta.draft}
+            onSetStatus={(status) => onSetDraftStatus(meta.draft.id, status)}
+          />
+        ) : (
+          <CommentBubble
+            comment={meta.comment}
+            onDelete={() => onDeleteComment(meta.commentIndex)}
           />
         );
-      }
 
       return (
-        <CommentBubble
-          comment={ann.metadata.comment}
-          onDelete={() => onDeleteComment(ann.metadata.commentIndex)}
-        />
+        <div className="annotation-anchor" data-annotation-id={annotationDomId(meta)}>
+          {inner}
+        </div>
       );
     },
     [fileDiff.name, onAddComment, onDeleteComment, onSetDraftStatus],
@@ -543,7 +567,7 @@ function FileDiffView({
 
 function SubPatchView({
   patch,
-  comments,
+  commentEntries,
   draftComments,
   diffStyle,
   wrap,
@@ -554,7 +578,7 @@ function SubPatchView({
   onToggleViewed,
 }: {
   patch: SubPatch;
-  comments: ManualComment[];
+  commentEntries: CommentEntry[];
   draftComments: AgentDraftCommentDecision[];
   diffStyle: "unified" | "split";
   wrap: boolean;
@@ -639,7 +663,7 @@ function SubPatchView({
           <FileDiffView
             key={fd.name}
             fileDiff={fd}
-            comments={comments}
+            commentEntries={commentEntries}
             draftComments={draftComments}
             diffStyle={diffStyle}
             wrap={wrap}
@@ -776,8 +800,8 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
     [viewedFiles, patches],
   );
 
-  const activeComments = useMemo(() => {
-    const result: { comment: ManualComment; globalIndex: number }[] = [];
+  const activeComments = useMemo<CommentEntry[]>(() => {
+    const result: CommentEntry[] = [];
     comments.forEach((comment, i) => {
       if (comment.sub === activeSub) result.push({ comment, globalIndex: i });
     });
@@ -803,6 +827,132 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
     () => countCommentFlow(comments, draftComments),
     [comments, draftComments],
   );
+
+  // -------------------------------------------------------------------------
+  // Comment navigation: flat, ordered index of all anchors across patches
+  // -------------------------------------------------------------------------
+  const patchFileOrder = useMemo(() => {
+    return patches.map((patch) => {
+      const parsed = parsePatchFiles(patch.diff);
+      return parsed.flatMap((p) => p.files).map((f) => f.name);
+    });
+  }, [patches]);
+
+  const navEntries = useMemo<NavEntry[]>(() => {
+    const list: NavEntry[] = [];
+    comments.forEach((comment, i) => {
+      list.push({
+        id: `manual-${i}`,
+        sub: comment.sub,
+        file: comment.file,
+        line: comment.line,
+        side: comment.side,
+        kind: "human",
+        body: comment.body,
+      });
+    });
+    draftComments.forEach((draft) => {
+      list.push({
+        id: `draft-${draft.id}`,
+        sub: draft.sub,
+        file: draft.file,
+        line: draft.line,
+        side: draft.side,
+        kind: "draft",
+        status: draft.status,
+        body: draft.body,
+      });
+    });
+    list.sort((a, b) => {
+      if (a.sub !== b.sub) return a.sub - b.sub;
+      const order = patchFileOrder[a.sub] ?? [];
+      const ai = order.indexOf(a.file);
+      const bi = order.indexOf(b.file);
+      if (ai !== bi) return ai - bi;
+      if (a.line !== b.line) return a.line - b.line;
+      if (a.side !== b.side) return a.side === "deletions" ? -1 : 1;
+      return a.id.localeCompare(b.id);
+    });
+    return list;
+  }, [comments, draftComments, patchFileOrder]);
+
+  const [navCursor, setNavCursor] = useState<string | null>(null);
+  const [navListOpen, setNavListOpen] = useState(false);
+  const [pendingScroll, setPendingScroll] = useState<NavEntry | null>(null);
+
+  // Keep cursor pointing at something valid as entries change.
+  useEffect(() => {
+    if (navEntries.length === 0) {
+      if (navCursor !== null) setNavCursor(null);
+      return;
+    }
+    if (!navCursor || !navEntries.some((e) => e.id === navCursor)) {
+      setNavCursor(navEntries[0].id);
+    }
+  }, [navEntries, navCursor]);
+
+  const gotoEntry = useCallback(
+    (entry: NavEntry) => {
+      setNavCursor(entry.id);
+      setPendingScroll(entry);
+      if (activeSub !== entry.sub) setActiveSub(entry.sub);
+    },
+    [activeSub],
+  );
+
+  const gotoStep = useCallback(
+    (step: 1 | -1) => {
+      if (navEntries.length === 0) return;
+      const idx = navEntries.findIndex((e) => e.id === navCursor);
+      const next = idx < 0 ? 0 : (idx + step + navEntries.length) % navEntries.length;
+      gotoEntry(navEntries[next]);
+    },
+    [navEntries, navCursor, gotoEntry],
+  );
+
+  // Resolve a pending scroll once activeSub matches and the target DOM exists.
+  // Unfold a viewed file first if needed.
+  useEffect(() => {
+    if (!pendingScroll) return;
+    if (activeSub !== pendingScroll.sub) return;
+
+    const viewed = viewedFiles.get(pendingScroll.sub);
+    if (viewed?.has(pendingScroll.file)) {
+      toggleViewed(pendingScroll.sub, pendingScroll.file);
+      return;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    const tryScroll = () => {
+      if (cancelled) return;
+      const el = document.querySelector(
+        `[data-annotation-id="${pendingScroll.id}"]`,
+      ) as HTMLElement | null;
+      if (el) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        el.classList.remove("annotation-anchor-flash");
+        // Re-flow so the animation restarts on repeat jumps.
+        void el.offsetWidth;
+        el.classList.add("annotation-anchor-flash");
+        window.setTimeout(() => el.classList.remove("annotation-anchor-flash"), 1700);
+        setPendingScroll(null);
+      } else if (attempts < 60) {
+        attempts++;
+        requestAnimationFrame(tryScroll);
+      } else {
+        setPendingScroll(null);
+      }
+    };
+    const handle = requestAnimationFrame(tryScroll);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(handle);
+    };
+  }, [pendingScroll, activeSub, viewedFiles, toggleViewed]);
+
+  // j/k or n/p keyboard shortcuts; skip when typing.
+  const navCursorIndex = navCursor ? navEntries.findIndex((e) => e.id === navCursor) : -1;
 
   const activeCommentCounts = useMemo(
     () => countCommentFlow(activeCommentsRaw, activeDraftComments),
@@ -994,13 +1144,13 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
         </div>
       </nav>
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="relative flex-1 overflow-y-auto">
         <div className="p-6">
           {patches[activeSub] && (
             <SubPatchView
               key={activeSub}
               patch={patches[activeSub]}
-              comments={activeCommentsRaw}
+              commentEntries={activeComments}
               draftComments={activeDraftComments}
               diffStyle={diffStyle}
               wrap={wrap}
@@ -1012,7 +1162,174 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
             />
           )}
         </div>
+
+        <CommentNavigator
+          entries={navEntries}
+          cursorIndex={navCursorIndex}
+          patches={patches}
+          open={navListOpen}
+          onToggle={() => setNavListOpen((o) => !o)}
+          onPrev={() => gotoStep(-1)}
+          onNext={() => gotoStep(1)}
+          onJump={gotoEntry}
+        />
       </main>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Comment navigator (floating panel + prev/next)
+// ---------------------------------------------------------------------------
+
+type NavEntry = {
+  id: string;
+  sub: number;
+  file: string;
+  line: number;
+  side: "additions" | "deletions";
+  kind: "human" | "draft";
+  status?: AgentDraftCommentDecision["status"];
+  body: string;
+};
+
+function navEntryDotClass(entry: NavEntry): string {
+  if (entry.kind === "human") return "bg-foreground/70";
+  if (entry.status === "accepted") return "bg-success";
+  if (entry.status === "rejected") return "bg-muted-foreground/40";
+  return "bg-primary";
+}
+
+function CommentNavigator({
+  entries,
+  cursorIndex,
+  patches,
+  open,
+  onToggle,
+  onPrev,
+  onNext,
+  onJump,
+}: {
+  entries: NavEntry[];
+  cursorIndex: number;
+  patches: SubPatch[];
+  open: boolean;
+  onToggle: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  onJump: (entry: NavEntry) => void;
+}) {
+  if (entries.length === 0) return null;
+
+  const grouped = useMemo(() => {
+    const map = new Map<number, NavEntry[]>();
+    entries.forEach((e) => {
+      const arr = map.get(e.sub) ?? [];
+      arr.push(e);
+      map.set(e.sub, arr);
+    });
+    return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
+  }, [entries]);
+
+  const counter = `${Math.max(cursorIndex, 0) + 1} / ${entries.length}`;
+
+  return (
+    <div className="pointer-events-none sticky top-4 z-30 -mt-2 flex justify-end px-6">
+      <div className="pointer-events-auto flex flex-col items-end gap-2">
+        <div className="flex items-center gap-1 rounded-full border border-primary/40 bg-primary px-1.5 py-1 text-primary-foreground shadow-[0_4px_12px_oklch(0/0/0/0.3)]">
+          <button
+            onClick={onToggle}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-2.5 py-1 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider transition-colors",
+              open ? "bg-primary-foreground/15" : "hover:bg-primary-foreground/10",
+            )}
+            title="Toggle comment list"
+          >
+            <ListTree className="size-3" />
+            <span>{counter}</span>
+          </button>
+          <button
+            onClick={onPrev}
+            className="rounded-full p-1.5 transition-colors hover:bg-primary-foreground/10"
+            title="Previous comment"
+          >
+            <ChevronUp className="size-3.5" />
+          </button>
+          <button
+            onClick={onNext}
+            className="rounded-full p-1.5 transition-colors hover:bg-primary-foreground/10"
+            title="Next comment"
+          >
+            <ChevronDown className="size-3.5" />
+          </button>
+        </div>
+
+        {open && (
+          <div className="animate-fade-in-up flex max-h-[60vh] w-[340px] flex-col overflow-hidden rounded-lg border border-border bg-card/95 shadow-[0_8px_24px_oklch(0/0/0/0.35)] backdrop-blur">
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
+              <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                Comments
+              </span>
+              <span className="font-[family-name:var(--font-mono)] text-[10px] text-muted-foreground">
+                {entries.length}
+              </span>
+            </div>
+            <div className="flex-1 overflow-y-auto py-1">
+              {grouped.map(([sub, items]) => (
+                <div key={sub} className="px-1 py-1">
+                  <div className="flex items-baseline gap-2 px-2 py-1">
+                    <span className="font-[family-name:var(--font-mono)] text-[10px] font-semibold tracking-widest text-primary">
+                      {String(sub + 1).padStart(2, "0")}
+                    </span>
+                    <span className="truncate text-[11px] text-muted-foreground">
+                      {patches[sub]?.description ?? `Patch ${sub + 1}`}
+                    </span>
+                  </div>
+                  {items.map((entry) => {
+                    const active = entries[cursorIndex]?.id === entry.id;
+                    return (
+                      <button
+                        key={entry.id}
+                        onClick={() => onJump(entry)}
+                        className={cn(
+                          "group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
+                          active ? "bg-surface" : "hover:bg-surface/60",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "mt-1.5 size-1.5 shrink-0 rounded-full",
+                            navEntryDotClass(entry),
+                          )}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[10px] text-muted-foreground">
+                            {entry.kind === "human" ? (
+                              <User className="size-2.5" />
+                            ) : (
+                              <Bot className="size-2.5" />
+                            )}
+                            <span className="truncate">{entry.file}</span>
+                            <span className="shrink-0">:{entry.line}</span>
+                          </span>
+                          <span
+                            className={cn(
+                              "mt-0.5 block truncate text-[12px]",
+                              active ? "text-foreground" : "text-muted-foreground/90",
+                            )}
+                          >
+                            {entry.body}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

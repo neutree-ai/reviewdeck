@@ -134,6 +134,28 @@ body::before {
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
+@keyframes annotation-flash {
+  0% {
+    box-shadow: 0 0 0 0 oklch(0.78 0.145 75 / 0);
+  }
+  20% {
+    box-shadow: 0 0 0 4px oklch(0.78 0.145 75 / 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 0 oklch(0.78 0.145 75 / 0);
+  }
+}
+
+.annotation-anchor {
+  border-radius: 8px;
+  scroll-margin-top: 72px;
+  scroll-margin-bottom: 24px;
+}
+
+.annotation-anchor-flash {
+  animation: annotation-flash 1.6s ease-out 1;
+}
+
 /* Stagger children */
 .stagger-children > *:nth-child(1) {
   animation-delay: 0ms;
