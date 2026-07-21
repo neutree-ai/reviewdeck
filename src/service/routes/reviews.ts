@@ -18,7 +18,8 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
   // Upload a diff (REST sideband — diffs must not flow through LLM tokens)
   // -----------------------------------------------------------------------
   app.post("/uploads", async (c) => {
-    const body = await c.req.text();
+    // Strip NUL bytes — Postgres text columns reject 0x00 (binary files can leak it into diffs)
+    const body = (await c.req.text()).replaceAll("\u0000", "");
     if (!body.trim()) return c.json({ error: "Empty diff" }, 400);
 
     const id = randomUUID();
