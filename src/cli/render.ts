@@ -8,14 +8,17 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { resolve, extname } from "node:path";
 import { readFile, readdir, stat } from "node:fs/promises";
-import type { AgentDraftComment, ReviewSubmission } from "../core/types.ts";
+import type { AgentDraftComment, ResolvedRewriteBlock, ReviewSubmission } from "../core/types.ts";
 
 interface SubPatch {
   index: number;
   description: string;
   diff: string;
   draftComments: AgentDraftComment[];
+  rewrites?: ResolvedRewriteBlock[];
 }
+
+type SubPatchMeta = Partial<Omit<SubPatch, "diff">>;
 
 async function findDir(candidates: string[]): Promise<string | null> {
   for (const dir of candidates) {
@@ -177,6 +180,7 @@ function parseHeaderedSubPatches(input: string, separator: string): SubPatch[] {
       index: metadata.index ?? results.length,
       description: metadata.description,
       draftComments: metadata.draftComments ?? [],
+      rewrites: metadata.rewrites,
       diff,
     });
   }
@@ -210,22 +214,15 @@ function parseLegacySubPatches(input: string, separator: string): SubPatch[] {
 function parseSeparatorMetadata(
   raw: string | undefined,
   fallbackIndex: number,
-): {
-  index?: number;
-  description: string;
-  draftComments?: AgentDraftComment[];
-} {
+): SubPatchMeta & { description: string } {
   if (!raw) return { index: fallbackIndex, description: `Sub-patch ${fallbackIndex + 1}` };
   try {
-    const parsed = JSON.parse(raw) as {
-      index?: number;
-      description?: string;
-      draftComments?: AgentDraftComment[];
-    };
+    const parsed = JSON.parse(raw) as SubPatchMeta;
     return {
       index: parsed.index ?? fallbackIndex,
       description: parsed.description?.trim() || `Sub-patch ${fallbackIndex + 1}`,
       draftComments: parsed.draftComments ?? [],
+      rewrites: parsed.rewrites,
     };
   } catch {
     return { index: fallbackIndex, description: raw.trim(), draftComments: [] };
@@ -251,15 +248,10 @@ export async function parseSubPatchesFromDir(dir: string): Promise<SubPatch[]> {
     });
 
   // Try to load descriptions and agent draft comments from meta.json
-  let metaRecords: {
-    index: number;
-    description: string;
-    draftComments?: AgentDraftComment[];
-  }[] = [];
+  let metaRecords: (SubPatchMeta & { index: number })[] = [];
   try {
     const raw = await readFile(resolve(dir, "meta.json"), "utf-8");
-    const meta: { index: number; description: string; draftComments?: AgentDraftComment[] }[] =
-      JSON.parse(raw);
+    const meta: (SubPatchMeta & { index: number })[] = JSON.parse(raw);
     metaRecords = meta.sort((a, b) => a.index - b.index);
   } catch {
     // No meta.json — fall back to generated descriptions
@@ -275,6 +267,7 @@ export async function parseSubPatchesFromDir(dir: string): Promise<SubPatch[]> {
       index: i,
       description,
       draftComments: meta?.draftComments ?? [],
+      rewrites: meta?.rewrites,
       diff: diff.trim(),
     });
   }

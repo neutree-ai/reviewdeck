@@ -1,4 +1,4 @@
-import type { ReviewSubmission } from "../core/types";
+import type { ResolvedRewriteBlock, ReviewSubmission } from "../core/types";
 
 export interface SubPatch {
   index: number;
@@ -14,6 +14,7 @@ export interface SubPatch {
     sub: number;
     source: "agent";
   }[];
+  rewrites?: ResolvedRewriteBlock[];
 }
 
 export interface DataOptions {

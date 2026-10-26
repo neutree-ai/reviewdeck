@@ -100,6 +100,8 @@ Default rules:
 
 If you need heavier guidance for grouping, description writing, or draft comment quality, then read [references/split.md](references/split.md).
 
+Experimental: a group may also include `rewrites`, equivalent re-expressions that the review UI shows in place of the covered code. Add them only when the user asks for rewrites; follow the user's rewrite prompt if they provide one, otherwise read [references/rewrite.md](references/rewrite.md).
+
 ### 5. Split and verify
 
 ```bash

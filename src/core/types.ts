@@ -92,6 +92,41 @@ export interface AgentDraftCommentDecision extends AgentDraftComment {
 export interface ReviewSubmission {
   comments: ReviewComment[];
   draftComments: AgentDraftCommentDecision[];
+  /** Experimental: ids of rewrite blocks whose source code the reviewer expanded. */
+  rewriteExpansions?: string[];
+}
+
+/**
+ * Experimental: an equivalent, more focused re-expression of a set of change
+ * lines. The review UI shows `rewrite` in place of the code; the code is one
+ * click away.
+ */
+export interface RewriteBlockInput {
+  /** Change indices this block replaces; must belong to the same group. */
+  changes: ChangeItem[];
+  /** Short label for the block. */
+  title?: string;
+  /** Markdown (GFM). */
+  rewrite: string;
+}
+
+export interface ResolvedRewriteBlock {
+  id: string;
+  title?: string;
+  rewrite: string;
+  /** Expanded change indices, used to attach draft comments to the block. */
+  changes: number[];
+  /** Where block-level comments land: the block's first line in the sub-patch. */
+  anchor: { file: string; line: number; side: ReviewSide };
+  /** Where the block's lines sit in the sub-patch, one entry per contiguous run. */
+  regions: RewriteRegion[];
+}
+
+/** Inclusive line ranges, in sub-patch line numbers, that a rewrite overlays. */
+export interface RewriteRegion {
+  file: string;
+  deletions?: [number, number];
+  additions?: [number, number];
 }
 
 /** The meta format that the LLM outputs. */
@@ -102,6 +137,8 @@ export interface SplitMeta {
     changes: ChangeItem[];
     /** Optional candidate review comments the agent noticed while splitting. */
     draftComments?: DraftReviewCommentInput[];
+    /** Experimental: rewrite blocks, in reading order. Uncovered lines stay as code. */
+    rewrites?: RewriteBlockInput[];
   }[];
 }
 

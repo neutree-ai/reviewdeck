@@ -10,42 +10,55 @@ import {
   ArrowUp,
   Check,
   Eye,
-  X,
   Bot,
   UserCheck,
   Ban,
   ChevronUp,
   ChevronDown,
   ListTree,
+  BookOpenText,
+  Code2,
 } from "lucide-react";
 import { Button } from "../ui/button";
-import { Textarea } from "../ui/textarea";
 import { Badge } from "../ui/badge";
 import { cn } from "../../lib/utils";
 import { countCommentFlow } from "../../comment-flow";
+import {
+  CommentBubble,
+  DraftCommentBubble,
+  InlineCommentForm,
+  type ManualComment,
+} from "./annotations";
+import { RewriteOverlays, inRegion, regionEnd, type OverlayRegion } from "./RewriteOverlay";
 import type {
   AgentDraftComment,
   AgentDraftCommentDecision,
+  ResolvedRewriteBlock,
   ReviewComment,
+  ReviewSide,
   ReviewSubmission,
 } from "../../../core/types";
+import { rewriteCoverage } from "../../../core/split";
 
 const DIFF_STYLE_STORAGE_KEY = "reviewdeck:review:diff-style";
 const DIFF_WRAP_STORAGE_KEY = "reviewdeck:review:diff-wrap";
+const READING_MODE_STORAGE_KEY = "reviewdeck:review:reading-mode";
+
+type ReadingMode = "rewrite" | "code";
 
 export interface SubPatch {
   index: number;
   description: string;
   diff: string;
   draftComments: AgentDraftComment[];
+  /** Experimental: equivalent re-expressions shown in place of the code. */
+  rewrites?: ResolvedRewriteBlock[];
 }
 
 export interface ReviewDeckProps {
   patches: SubPatch[];
   onSubmit?: (submission: ReviewSubmission) => void | Promise<void>;
 }
-
-type ManualComment = ReviewComment & { source: "human" };
 
 type CommentEntry = { comment: ManualComment; globalIndex: number };
 
@@ -67,125 +80,10 @@ function annotationDomId(meta: Extract<AnnotationMeta, { kind: "comment" | "draf
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function InlineCommentForm({
-  onSubmit,
-  onCancel,
-}: {
-  onSubmit: (body: string) => void;
-  onCancel: () => void;
-}) {
-  const [text, setText] = useState("");
-
-  return (
-    <div className="bg-card/80 p-3 backdrop-blur-sm">
-      <Textarea
-        autoFocus
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Leave a comment..."
-        className="resize-y text-[13px]"
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            if (text.trim()) onSubmit(text.trim());
-          }
-          if (e.key === "Escape") onCancel();
-        }}
-      />
-      <div className="mt-2 flex items-center justify-between">
-        <span className="text-[11px] text-muted-foreground">
-          <kbd className="rounded border border-border px-1 py-0.5 font-[family-name:var(--font-mono)] text-[10px]">
-            ⌘↵
-          </kbd>{" "}
-          to submit
-        </span>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button variant="default" size="sm" onClick={() => text.trim() && onSubmit(text.trim())}>
-            Comment
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CommentBubble({ comment, onDelete }: { comment: ManualComment; onDelete: () => void }) {
-  return (
-    <div className="annotation-card annotation-card-human group/comment flex items-start gap-2.5 rounded-md px-3.5 py-3 text-[13px] leading-relaxed shadow-[0_1px_2px_oklch(0/0/0/0.15)]">
-      <MessageSquare className="annotation-meta mt-0.5 size-3 shrink-0" />
-      <span className="annotation-body flex-1 whitespace-pre-wrap leading-6">{comment.body}</span>
-      <button
-        onClick={onDelete}
-        className="annotation-meta mt-0.5 shrink-0 rounded p-1 hover:bg-white/8 hover:text-white"
-        title="Delete comment"
-      >
-        <X className="size-3" />
-      </button>
-    </div>
-  );
-}
-
-function DraftCommentBubble({
-  draft,
-  onSetStatus,
-}: {
-  draft: AgentDraftCommentDecision;
-  onSetStatus: (status: AgentDraftCommentDecision["status"]) => void;
-}) {
-  const statusLabel =
-    draft.status === "accepted" ? "Accepted" : draft.status === "rejected" ? "Rejected" : "Draft";
-  const toneClass =
-    draft.status === "accepted"
-      ? "annotation-card-agent-accepted"
-      : draft.status === "rejected"
-        ? "annotation-card-agent-rejected"
-        : "annotation-card-agent-pending";
-
-  return (
-    <div
-      className={cn(
-        "annotation-card flex flex-col gap-2.5 rounded-md px-3.5 py-3 text-[13px] leading-relaxed shadow-[0_1px_2px_oklch(0/0/0/0.15)]",
-        toneClass,
-      )}
-    >
-      <div className="annotation-meta flex items-center gap-2 text-[11px] uppercase tracking-wide">
-        <Bot className="size-3 shrink-0" />
-        <span>Agent draft</span>
-        <Badge variant="outline" size="sm">
-          {statusLabel}
-        </Badge>
-      </div>
-      <div className="annotation-body whitespace-pre-wrap text-[13px] leading-6">{draft.body}</div>
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          className="annotation-button-accept gap-1.5"
-          onClick={() => onSetStatus("accepted")}
-        >
-          <UserCheck className="size-3" />
-          Accept
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="annotation-button-reject gap-1.5"
-          onClick={() => onSetStatus("rejected")}
-        >
-          <Ban className="size-3" />
-          Reject
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function buildSubmission(
   manualComments: ManualComment[],
   draftComments: AgentDraftCommentDecision[],
+  rewriteExpansions: Set<string>,
 ): ReviewSubmission {
   const acceptedDraftComments: ReviewComment[] = draftComments
     .filter((draft) => draft.status === "accepted")
@@ -202,6 +100,7 @@ function buildSubmission(
   return {
     comments: [...manualComments, ...acceptedDraftComments],
     draftComments,
+    ...(rewriteExpansions.size > 0 && { rewriteExpansions: [...rewriteExpansions] }),
   };
 }
 
@@ -372,8 +271,23 @@ function CommentStatusCard({
   );
 }
 
-function FileDiffView({
+/** Rewrite overlays for one file: the regions they cover and which are lifted. */
+interface FileRewrites {
+  regions: OverlayRegion[];
+  revealed: Set<string>;
+  onToggle: (blockId: string) => void;
+}
+
+/** Rewrite state shared by all files of a sub-patch. */
+interface RewriteContext {
+  blocks: ResolvedRewriteBlock[];
+  revealed: Set<string>;
+  onToggle: (blockId: string) => void;
+}
+
+function DiffBody({
   fileDiff,
+  rewrites,
   commentEntries,
   draftComments,
   diffStyle,
@@ -382,9 +296,9 @@ function FileDiffView({
   onAddComment,
   onDeleteComment,
   onSetDraftStatus,
-  onToggleViewed,
 }: {
   fileDiff: FileDiffMetadata;
+  rewrites?: FileRewrites;
   commentEntries: CommentEntry[];
   draftComments: AgentDraftCommentDecision[];
   diffStyle: "unified" | "split";
@@ -393,21 +307,37 @@ function FileDiffView({
   onAddComment: (comment: Omit<ManualComment, "sub" | "source">) => void;
   onDeleteComment: (commentIndex: number) => void;
   onSetDraftStatus: (draftId: string, status: AgentDraftCommentDecision["status"]) => void;
-  onToggleViewed: () => void;
 }) {
+  // State, not a ref: the overlays measure in a layout effect that runs before
+  // a parent ref would be attached.
+  const [wrapEl, setWrapEl] = useState<HTMLDivElement | null>(null);
+  const fileName = fileDiff.name;
   const [pendingLine, setPendingLine] = useState<{
     line: number;
     side: "additions" | "deletions";
   } | null>(null);
 
+  // While a rewrite covers a line, its annotations move below the covered
+  // region so they stay visible.
+  const place = useCallback(
+    (side: ReviewSide, line: number) => {
+      const covered = rewrites?.regions.find(
+        ({ block, region }) => !rewrites.revealed.has(block.id) && inRegion(region, side, line),
+      );
+      return covered ? regionEnd(covered.region) : { side, line };
+    },
+    [rewrites],
+  );
+
   const annotations: DiffLineAnnotation<AnnotationMeta>[] = useMemo(() => {
     const result: DiffLineAnnotation<AnnotationMeta>[] = [];
 
     commentEntries.forEach((entry, i) => {
-      if (entry.comment.file !== fileDiff.name) return;
+      if (entry.comment.file !== fileName) return;
+      const at = place(entry.comment.side, entry.comment.line);
       result.push({
-        side: entry.comment.side,
-        lineNumber: entry.comment.line,
+        side: at.side,
+        lineNumber: at.line,
         metadata: {
           kind: "comment",
           comment: entry.comment,
@@ -418,24 +348,18 @@ function FileDiffView({
     });
 
     draftComments.forEach((draft) => {
-      if (draft.file !== fileDiff.name) return;
-      result.push({
-        side: draft.side,
-        lineNumber: draft.line,
-        metadata: { kind: "draft", draft },
-      });
+      if (draft.file !== fileName) return;
+      const at = place(draft.side, draft.line);
+      result.push({ side: at.side, lineNumber: at.line, metadata: { kind: "draft", draft } });
     });
 
     if (pendingLine) {
-      result.push({
-        side: pendingLine.side,
-        lineNumber: pendingLine.line,
-        metadata: { kind: "pending" },
-      });
+      const at = place(pendingLine.side, pendingLine.line);
+      result.push({ side: at.side, lineNumber: at.line, metadata: { kind: "pending" } });
     }
 
     return result;
-  }, [commentEntries, draftComments, fileDiff.name, pendingLine]);
+  }, [commentEntries, draftComments, fileName, pendingLine, place]);
 
   const options = useMemo(
     () => ({
@@ -471,7 +395,7 @@ function FileDiffView({
           <InlineCommentForm
             onSubmit={(body) => {
               onAddComment({
-                file: fileDiff.name,
+                file: fileName,
                 line: ann.lineNumber,
                 side: ann.side as "additions" | "deletions",
                 body,
@@ -503,9 +427,55 @@ function FileDiffView({
         </div>
       );
     },
-    [fileDiff.name, onAddComment, onDeleteComment, onSetDraftStatus],
+    [fileName, onAddComment, onDeleteComment, onSetDraftStatus],
   );
 
+  return (
+    <div ref={setWrapEl} className="relative">
+      <FileDiff
+        fileDiff={fileDiff}
+        options={options}
+        lineAnnotations={annotations}
+        renderAnnotation={renderAnnotation}
+      />
+      {rewrites && !viewed && (
+        <RewriteOverlays
+          wrap={wrapEl}
+          regions={rewrites.regions}
+          revealed={rewrites.revealed}
+          onToggle={rewrites.onToggle}
+          onComment={(block) => setPendingLine(place(block.anchor.side, block.anchor.line))}
+        />
+      )}
+    </div>
+  );
+}
+
+function FileDiffView({
+  fileDiff,
+  rewrite,
+  commentEntries,
+  draftComments,
+  diffStyle,
+  wrap,
+  viewed,
+  onAddComment,
+  onDeleteComment,
+  onSetDraftStatus,
+  onToggleViewed,
+}: {
+  fileDiff: FileDiffMetadata;
+  rewrite?: RewriteContext;
+  commentEntries: CommentEntry[];
+  draftComments: AgentDraftCommentDecision[];
+  diffStyle: "unified" | "split";
+  wrap: boolean;
+  viewed: boolean;
+  onAddComment: (comment: Omit<ManualComment, "sub" | "source">) => void;
+  onDeleteComment: (commentIndex: number) => void;
+  onSetDraftStatus: (draftId: string, status: AgentDraftCommentDecision["status"]) => void;
+  onToggleViewed: () => void;
+}) {
   const diffSummary = useMemo(() => {
     let additions = 0;
     let deletions = 0;
@@ -515,6 +485,23 @@ function FileDiffView({
     });
     return { additions, deletions };
   }, [fileDiff.hunks]);
+
+  const regions = useMemo(
+    () =>
+      rewrite?.blocks.flatMap((block) =>
+        block.regions
+          .filter((region) => region.file === fileDiff.name)
+          .map((region, i) => ({ key: `${block.id}:${i}`, block, region })),
+      ),
+    [rewrite?.blocks, fileDiff.name],
+  );
+  const fileRewrites = useMemo(
+    () =>
+      rewrite && regions?.length
+        ? { regions, revealed: rewrite.revealed, onToggle: rewrite.onToggle }
+        : undefined,
+    [rewrite, regions],
+  );
 
   return (
     <div
@@ -553,11 +540,17 @@ function FileDiffView({
         </div>
       </div>
       <div className="overflow-hidden rounded-b-lg">
-        <FileDiff
+        <DiffBody
           fileDiff={fileDiff}
-          options={options}
-          lineAnnotations={annotations}
-          renderAnnotation={renderAnnotation}
+          rewrites={fileRewrites}
+          commentEntries={commentEntries}
+          draftComments={draftComments}
+          diffStyle={diffStyle}
+          wrap={wrap}
+          viewed={viewed}
+          onAddComment={onAddComment}
+          onDeleteComment={onDeleteComment}
+          onSetDraftStatus={onSetDraftStatus}
         />
       </div>
     </div>
@@ -571,10 +564,15 @@ function SubPatchView({
   diffStyle,
   wrap,
   viewedFiles,
+  readingMode,
+  expandedRewrites,
   onAddComment,
   onDeleteComment,
   onSetDraftStatus,
   onToggleViewed,
+  onReadingModeChange,
+  onToggleRewrite,
+  onSetRewritesExpanded,
 }: {
   patch: SubPatch;
   commentEntries: CommentEntry[];
@@ -582,10 +580,15 @@ function SubPatchView({
   diffStyle: "unified" | "split";
   wrap: boolean;
   viewedFiles: Set<string>;
+  readingMode: ReadingMode;
+  expandedRewrites: Set<string>;
   onAddComment: (comment: Omit<ManualComment, "sub" | "source">) => void;
   onDeleteComment: (commentIndex: number) => void;
   onSetDraftStatus: (draftId: string, status: AgentDraftCommentDecision["status"]) => void;
   onToggleViewed: (file: string) => void;
+  onReadingModeChange: (mode: ReadingMode) => void;
+  onToggleRewrite: (blockId: string) => void;
+  onSetRewritesExpanded: (blockIds: string[], expanded: boolean) => void;
 }) {
   const fileDiffs = useMemo(() => {
     const parsed = parsePatchFiles(patch.diff);
@@ -593,6 +596,31 @@ function SubPatchView({
   }, [patch.diff]);
 
   const draftCounts = useMemo(() => countDraftStatuses(draftComments), [draftComments]);
+  const hasRewrites = (patch.rewrites?.length ?? 0) > 0;
+  const showRewrites = hasRewrites && readingMode === "rewrite";
+
+  const rewriteContext = useMemo<RewriteContext | undefined>(
+    () =>
+      showRewrites
+        ? { blocks: patch.rewrites!, revealed: expandedRewrites, onToggle: onToggleRewrite }
+        : undefined,
+    [showRewrites, patch.rewrites, expandedRewrites, onToggleRewrite],
+  );
+
+  const blockIds = patch.rewrites?.map((block) => block.id) ?? [];
+  const allExpanded = blockIds.length > 0 && blockIds.every((id) => expandedRewrites.has(id));
+  const coverage = useMemo(
+    () => rewriteCoverage(patch.diff, patch.rewrites),
+    [patch.diff, patch.rewrites],
+  );
+  // Change lines left to read as code: uncovered ones plus those under lifted rewrites.
+  const toRead = showRewrites
+    ? coverage.total -
+      coverage.covered +
+      (patch.rewrites ?? [])
+        .filter((block) => expandedRewrites.has(block.id))
+        .reduce((n, block) => n + block.changes.length, 0)
+    : coverage.total;
 
   return (
     <div className="animate-fade-in-up">
@@ -651,10 +679,58 @@ function SubPatchView({
             </div>
           )}
         </div>
-        <span className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground">
-          <Eye className="size-3" />
-          {fileDiffs.filter((fd) => viewedFiles.has(fd.name)).length}/{fileDiffs.length}
-        </span>
+        <div className="flex shrink-0 items-center gap-3">
+          {hasRewrites && (
+            <div className="inline-flex rounded-md border border-border bg-background/70 p-1 shadow-[0_1px_2px_oklch(0/0/0/0.12)]">
+              {(
+                [
+                  ["rewrite", BookOpenText, "Rewrite"],
+                  ["code", Rows3, "Code"],
+                ] as const
+              ).map(([mode, Icon, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => onReadingModeChange(mode)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded px-2.5 py-1 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider transition-colors",
+                    readingMode === mode
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-surface hover:text-foreground",
+                  )}
+                >
+                  <Icon className="size-3" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {showRewrites && (
+            <button
+              onClick={() => onSetRewritesExpanded(blockIds, !allExpanded)}
+              className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              title={
+                allExpanded
+                  ? "Lay every rewrite back over its code"
+                  : "Reveal the code under every rewrite"
+              }
+            >
+              <Code2 className="size-3" />
+              {allExpanded ? "Cover all" : "Reveal all"}
+            </button>
+          )}
+          {hasRewrites && (
+            <span
+              className="font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground"
+              title={`Rewrites cover ${coverage.covered} of ${coverage.total} changed lines`}
+            >
+              <span className="text-foreground">{toRead}</span>/{coverage.total} lines to read
+            </span>
+          )}
+          <span className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground">
+            <Eye className="size-3" />
+            {fileDiffs.filter((fd) => viewedFiles.has(fd.name)).length}/{fileDiffs.length}
+          </span>
+        </div>
       </div>
 
       <div className="stagger-children space-y-3">
@@ -662,6 +738,7 @@ function SubPatchView({
           <FileDiffView
             key={fd.name}
             fileDiff={fd}
+            rewrite={rewriteContext}
             commentEntries={commentEntries}
             draftComments={draftComments}
             diffStyle={diffStyle}
@@ -695,6 +772,13 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(DIFF_WRAP_STORAGE_KEY) === "1";
   });
+  const [readingMode, setReadingMode] = useState<ReadingMode>(() => {
+    if (typeof window === "undefined") return "rewrite";
+    return window.localStorage.getItem(READING_MODE_STORAGE_KEY) === "code" ? "code" : "rewrite";
+  });
+  const [expandedRewrites, setExpandedRewrites] = useState<Set<string>>(new Set());
+  // Every block the reviewer ever opened: where the rewrite was not enough.
+  const [rewriteExpansions, setRewriteExpansions] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [viewedFiles, setViewedFiles] = useState<Map<number, Set<string>>>(new Map());
@@ -720,6 +804,29 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
     window.localStorage.setItem(DIFF_WRAP_STORAGE_KEY, wrap ? "1" : "0");
   }, [wrap]);
 
+  useEffect(() => {
+    window.localStorage.setItem(READING_MODE_STORAGE_KEY, readingMode);
+  }, [readingMode]);
+
+  const setRewritesExpanded = useCallback((blockIds: string[], expanded: boolean) => {
+    setExpandedRewrites((prev) => {
+      const next = new Set(prev);
+      for (const id of blockIds) {
+        if (expanded) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+    if (expanded) {
+      setRewriteExpansions((prev) => new Set([...prev, ...blockIds]));
+    }
+  }, []);
+
+  const toggleRewrite = useCallback(
+    (blockId: string) => setRewritesExpanded([blockId], !expandedRewrites.has(blockId)),
+    [expandedRewrites, setRewritesExpanded],
+  );
+
   const addComment = useCallback(
     (subIndex: number, comment: Omit<ManualComment, "sub" | "source">) => {
       setComments((prev) => [...prev, { ...comment, sub: subIndex, source: "human" }]);
@@ -740,9 +847,15 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
     [],
   );
 
+  const coverageBySub = useMemo(
+    () =>
+      new Map(patches.map((patch) => [patch.index, rewriteCoverage(patch.diff, patch.rewrites)])),
+    [patches],
+  );
+
   const submission = useMemo(
-    () => buildSubmission(comments, draftComments),
-    [comments, draftComments],
+    () => buildSubmission(comments, draftComments, rewriteExpansions),
+    [comments, draftComments, rewriteExpansions],
   );
 
   const handleSubmit = useCallback(async () => {
@@ -1110,6 +1223,16 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
                   >
                     {patch.description}
                   </span>
+                  {(patch.rewrites?.length ?? 0) > 0 && (
+                    <span
+                      className="mt-1 mr-2 inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-[10px] text-primary/70"
+                      title={`${patch.rewrites!.length} rewrite blocks cover ${coverageBySub.get(patch.index)!.covered} of ${coverageBySub.get(patch.index)!.total} changed lines`}
+                    >
+                      <BookOpenText className="size-2.5" />
+                      {coverageBySub.get(patch.index)!.covered}/
+                      {coverageBySub.get(patch.index)!.total} rewritten
+                    </span>
+                  )}
                   {(subComments.length > 0 || subDraftComments.length > 0) && (
                     <span className="mt-1 inline-flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground/60">
                       {commentCounts.final > 0 && (
@@ -1166,6 +1289,11 @@ export function ReviewDeck({ patches, onSubmit }: ReviewDeckProps) {
               onDeleteComment={handleDeleteComment}
               onSetDraftStatus={setDraftStatus}
               onToggleViewed={(file) => toggleViewed(activeSub, file)}
+              readingMode={readingMode}
+              expandedRewrites={expandedRewrites}
+              onReadingModeChange={setReadingMode}
+              onToggleRewrite={toggleRewrite}
+              onSetRewritesExpanded={setRewritesExpanded}
             />
           )}
         </div>

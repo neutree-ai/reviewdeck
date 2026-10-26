@@ -12,6 +12,8 @@ import type {
   ChangeItem,
   FilePatch,
   IndexedChange,
+  ResolvedRewriteBlock,
+  RewriteRegion,
   SplitMeta,
 } from "./types.ts";
 import { parsePatch } from "./patch.ts";
@@ -21,6 +23,8 @@ export interface ResolvedSplitGroupMeta {
   index: number;
   description: string;
   draftComments: AgentDraftComment[];
+  /** Experimental: rewrite blocks in reading order. */
+  rewrites?: ResolvedRewriteBlock[];
 }
 
 // ---------------------------------------------------------------------------
@@ -194,6 +198,34 @@ export function validateMeta(meta: SplitMeta, totalChanges: number): string[] {
         );
       }
     }
+
+    const rewritten = new Set<number>();
+    for (let r = 0; r < (group.rewrites?.length ?? 0); r++) {
+      const block = group.rewrites![r]!;
+      const label = `Group ${g + 1}: rewrite ${r + 1}`;
+      if (!block.rewrite?.trim()) {
+        errors.push(`${label} is missing rewrite`);
+      }
+      let blockChanges: number[];
+      try {
+        blockChanges = expandChanges(block.changes ?? []);
+      } catch (e: any) {
+        errors.push(`${label}: ${e.message}`);
+        continue;
+      }
+      if (blockChanges.length === 0) {
+        errors.push(`${label} covers no changes`);
+      }
+      const foreign = blockChanges.filter((idx) => !groupChanges.has(idx));
+      for (const range of collapseRanges(foreign.sort((a, b) => a - b))) {
+        errors.push(`${label}: change ${range} is not assigned to this group`);
+      }
+      const overlap = blockChanges.filter((idx) => rewritten.has(idx));
+      for (const range of collapseRanges(overlap.sort((a, b) => a - b))) {
+        errors.push(`${label}: change ${range} is already covered by another rewrite`);
+      }
+      for (const idx of blockChanges) rewritten.add(idx);
+    }
   }
 
   const unassigned: number[] = [];
@@ -230,6 +262,112 @@ export function resolveSplitGroupMeta(
       };
     }),
   }));
+}
+
+/**
+ * Experimental: locate each rewrite block's lines inside its sub-patch.
+ *
+ * Sub-patch g emits exactly group g's change lines, in ascending change-index
+ * order, so the k-th +/- line of the sub-patch is the k-th smallest index of
+ * the group. A region is a contiguous run of one block's lines within a hunk;
+ * context lines between two lines of the same block belong to the region.
+ */
+export function resolveGroupRewrites(
+  meta: SplitMeta,
+  subPatches: string[],
+): Pick<ResolvedSplitGroupMeta, "rewrites">[] {
+  return meta.groups.map((group, g) => {
+    if (!group.rewrites?.length) return {};
+
+    const blockIds = group.rewrites.map((_, r) => `g${g + 1}-rw${r + 1}`);
+    const blockChanges = group.rewrites.map((block) => expandChanges(block.changes));
+    const ownerOf = new Map<number, string>();
+    blockChanges.forEach((changes, r) => changes.forEach((idx) => ownerOf.set(idx, blockIds[r]!)));
+    const order = expandChanges(group.changes).sort((a, b) => a - b);
+
+    const anchors = new Map<string, ResolvedRewriteBlock["anchor"]>();
+    const regions = new Map<string, RewriteRegion[]>(blockIds.map((id) => [id, []]));
+    const extend = (range: [number, number] | undefined, from: number, to: number) =>
+      from > to
+        ? range
+        : ([Math.min(range?.[0] ?? from, from), Math.max(range?.[1] ?? to, to)] as [
+            number,
+            number,
+          ]);
+    let k = 0;
+
+    for (const fp of parsePatch(subPatches[g]!)) {
+      const file = fp.isDelete ? fp.srcFile : fp.dstFile;
+      for (const hunk of fp.hunks) {
+        let src = hunk.srcStart;
+        let dst = hunk.dstStart;
+        let open = null as { owner: string; region: RewriteRegion } | null;
+        let gap = { src, dst };
+
+        for (const line of hunk.lines) {
+          if (line.type === "\\") continue;
+          if (line.type === " ") {
+            src++;
+            dst++;
+            continue;
+          }
+
+          const owner = ownerOf.get(order[k++]!);
+          if (!owner) {
+            open = null;
+          } else if (open?.owner === owner) {
+            // Context since the previous line of this block joins the region.
+            open.region.deletions = extend(open.region.deletions, gap.src, src - 1);
+            open.region.additions = extend(open.region.additions, gap.dst, dst - 1);
+          } else {
+            open = { owner, region: { file } };
+            regions.get(owner)!.push(open.region);
+          }
+          if (owner && !anchors.has(owner)) {
+            anchors.set(owner, {
+              file,
+              line: line.type === "+" ? dst : src,
+              side: line.type === "+" ? "additions" : "deletions",
+            });
+          }
+          if (open && line.type === "-")
+            open.region.deletions = extend(open.region.deletions, src, src);
+          if (open && line.type === "+")
+            open.region.additions = extend(open.region.additions, dst, dst);
+          if (line.type === "-") src++;
+          else dst++;
+          gap = { src, dst };
+        }
+      }
+    }
+
+    return {
+      rewrites: group.rewrites.map((block, r) => ({
+        id: blockIds[r]!,
+        title: block.title?.trim() || undefined,
+        rewrite: block.rewrite.trim(),
+        changes: blockChanges[r]!,
+        anchor: anchors.get(blockIds[r]!)!,
+        regions: regions.get(blockIds[r]!)!,
+      })),
+    };
+  });
+}
+
+/**
+ * How many of a sub-patch's change lines its rewrites cover: the lines a
+ * reviewer may read as rewrites instead of code. Blocks never overlap, so the
+ * covered count is the sum of their changes.
+ */
+export function rewriteCoverage(
+  subPatch: string,
+  rewrites: ResolvedRewriteBlock[] = [],
+): { total: number; covered: number } {
+  let total = 0;
+  for (const fp of parsePatch(subPatch))
+    for (const hunk of fp.hunks)
+      for (const line of hunk.lines) if (line.type === "+" || line.type === "-") total++;
+  return { total, covered: rewrites.reduce((n, block) => n + block.changes.length, 0) };
 }
 
 // ---------------------------------------------------------------------------

@@ -6,8 +6,11 @@ import {
   validateMeta,
   generateSubPatches,
   resolveSplitGroupMeta,
+  resolveGroupRewrites,
+  rewriteCoverage,
   type SplitMeta,
 } from "./split.ts";
+import type { ChangeItem } from "./types.ts";
 import { parsePatch, applyPatch, reconstructBase } from "./patch.ts";
 
 // ---------------------------------------------------------------------------
@@ -628,5 +631,92 @@ describe("resolveSplitGroupMeta", () => {
         source: "agent",
       },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rewrites (experimental)
+// ---------------------------------------------------------------------------
+
+describe("rewrites", () => {
+  const patch = `diff --git a/foo.py b/foo.py
+--- a/foo.py
++++ b/foo.py
+@@ -1,6 +1,6 @@
+ a
+-b
++B
+ c
+-d
++D
+ e
+-f
++F
+`;
+
+  it("rejects blocks that leave the group or overlap", () => {
+    const meta: SplitMeta = {
+      groups: [
+        {
+          description: "first",
+          changes: ["0-3"],
+          rewrites: [
+            { changes: ["0-1"], rewrite: "b → B" },
+            { changes: [1, 4], rewrite: "" },
+          ],
+        },
+        { description: "second", changes: ["4-5"] },
+      ],
+    };
+    expect(validateMeta(meta, 6)).toEqual([
+      "Group 1: rewrite 2 is missing rewrite",
+      "Group 1: rewrite 2: change 4 is not assigned to this group",
+      "Group 1: rewrite 2: change 1 is already covered by another rewrite",
+    ]);
+  });
+
+  const regionsOf = (rewrites: { changes: ChangeItem[] }[]) => {
+    const meta: SplitMeta = {
+      groups: [
+        {
+          description: "all",
+          changes: ["0-5"],
+          rewrites: rewrites.map((r) => ({ ...r, rewrite: "x" })),
+        },
+      ],
+    };
+    return resolveGroupRewrites(meta, generateSubPatches(patch, meta))[0]!.rewrites!;
+  };
+
+  it("locates a block's lines in sub-patch line numbers", () => {
+    const [block] = regionsOf([{ changes: ["2-3"] }]);
+    expect(block!.anchor).toEqual({ file: "foo.py", line: 4, side: "deletions" });
+    expect(block!.regions).toEqual([{ file: "foo.py", deletions: [4, 4], additions: [4, 4] }]);
+  });
+
+  it("keeps context between two lines of the same block inside its region", () => {
+    const [block] = regionsOf([{ changes: ["2-5"] }]);
+    expect(block!.regions).toEqual([{ file: "foo.py", deletions: [4, 6], additions: [4, 6] }]);
+  });
+
+  it("splits a block into one region per contiguous run", () => {
+    const [inner, outer] = regionsOf([{ changes: ["2-3"] }, { changes: ["0-1", "4-5"] }]);
+    expect(inner!.regions).toEqual([{ file: "foo.py", deletions: [4, 4], additions: [4, 4] }]);
+    expect(outer!.regions).toEqual([
+      { file: "foo.py", deletions: [2, 2], additions: [2, 2] },
+      { file: "foo.py", deletions: [6, 6], additions: [6, 6] },
+    ]);
+  });
+
+  it("counts the change lines rewrites cover", () => {
+    const meta: SplitMeta = {
+      groups: [
+        { description: "all", changes: ["0-5"], rewrites: [{ changes: ["0-1", 4], rewrite: "x" }] },
+      ],
+    };
+    const [sub] = generateSubPatches(patch, meta);
+    const { rewrites } = resolveGroupRewrites(meta, [sub!])[0]!;
+    expect(rewriteCoverage(sub!, rewrites)).toEqual({ total: 6, covered: 3 });
+    expect(rewriteCoverage(sub!)).toEqual({ total: 6, covered: 0 });
   });
 });

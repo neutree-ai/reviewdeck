@@ -18,6 +18,8 @@ import {
   validateMeta,
   generateSubPatches,
   resolveSplitGroupMeta,
+  resolveGroupRewrites,
+  rewriteCoverage,
   type SplitMeta,
   type ResolvedSplitGroupMeta,
 } from "../core/split.ts";
@@ -106,6 +108,10 @@ back to the original diff.
 Split metadata can optionally include group-level "draftComments" so the
 review UI can render agent findings inline for accept/reject.
 
+Experimental: group-level "rewrites" ([{ changes, title?, rewrite }]) replace
+the covered change lines with an equivalent, focused Markdown re-expression
+in the review UI; the code stays one click away.
+
 After a successful split, continue with "reviewdeck render" when the goal
 is to hand the proposed sub-patches to a human reviewer or collect comments.`);
 }
@@ -142,6 +148,12 @@ async function readFileOrStdin(path: string): Promise<string> {
   return path === "-" ? readStdin() : readFile(path, "utf-8");
 }
 
+function coverageNote(sub: string, group: ResolvedSplitGroupMeta): string {
+  if (!group.rewrites?.length) return "";
+  const { total, covered } = rewriteCoverage(sub, group.rewrites);
+  return `; rewrites cover ${covered}/${total} changed lines`;
+}
+
 function writeSubs(
   subs: string[],
   groups: ResolvedSplitGroupMeta[],
@@ -153,16 +165,25 @@ function writeSubs(
       const outPath = `${outDir}/sub${i + 1}.diff`;
       writeFileSync(outPath, subs[i]!);
       const lineCount = subs[i]!.split("\n").length;
-      console.error(`  Wrote ${outPath} (${lineCount} lines)`);
+      console.error(`  Wrote ${outPath} (${lineCount} lines${coverageNote(subs[i]!, groups[i]!)})`);
     }
     // Write meta.json so render can read descriptions and draft review comments.
     const meta = groups.map((group) => ({
       index: group.index,
       description: group.description,
       draftComments: group.draftComments,
+      rewrites: group.rewrites,
     }));
     writeFileSync(`${outDir}/meta.json`, JSON.stringify(meta, null, 2) + "\n");
     console.error(`  Wrote ${outDir}/meta.json`);
+    const coverage = subs.map((sub, i) => rewriteCoverage(sub, groups[i]!.rewrites));
+    const covered = coverage.reduce((n, c) => n + c.covered, 0);
+    if (covered > 0) {
+      const total = coverage.reduce((n, c) => n + c.total, 0);
+      console.error(
+        `  Rewrites cover ${covered}/${total} changed lines; ${total - covered} left to read as code.`,
+      );
+    }
   } else {
     for (let i = 0; i < subs.length; i++) {
       const meta = JSON.stringify(groups[i]!);
@@ -310,7 +331,11 @@ This is likely a bug in the splitting algorithm. Please report it.`);
 
   // All good — output sub-patches
   console.error("OK: Verified — sub-patches compose to equal the original diff.");
-  const groupMeta = resolveSplitGroupMeta(meta, changes);
+  const rewrites = resolveGroupRewrites(meta, subs);
+  const groupMeta = resolveSplitGroupMeta(meta, changes).map((group, i) => ({
+    ...group,
+    ...rewrites[i],
+  }));
   writeSubs(subs, groupMeta, values.output);
 
   if (values.output) {
