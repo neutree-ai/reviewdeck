@@ -102,7 +102,10 @@ export interface ReviewSubmission {
  * click away.
  */
 export interface RewriteBlockInput {
-  /** Change indices this block replaces; must belong to the same group. */
+  /**
+   * Change indices this block replaces: one contiguous stretch of its group's
+   * changes, so no other change of the group falls between them.
+   */
   changes: ChangeItem[];
   /** Short label for the block. */
   title?: string;
@@ -122,7 +125,7 @@ export interface ResolvedRewriteBlock {
   regions: RewriteRegion[];
 }
 
-/** Inclusive line ranges, in sub-patch line numbers, that a rewrite overlays. */
+/** Inclusive line ranges, in sub-patch line numbers, that a rewrite stands in for. */
 export interface RewriteRegion {
   file: string;
   deletions?: [number, number];

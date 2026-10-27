@@ -263,68 +263,25 @@ body::before {
 /* Rewrite blocks (experimental)                                       */
 /* ------------------------------------------------------------------ */
 
-/* A rewrite laid over the code lines it re-expresses. The rows underneath are
-   folded down to what the rewrite needs, so the diff keeps its shape and
-   shrinks. */
-.rw-overlay {
-  position: absolute;
-  z-index: 5;
-  padding: 0 8px 0 14px;
-  overflow: hidden;
-  cursor: pointer;
-  /* Nearly opaque instead of a backdrop blur: blurred layers made every
-     scroll frame repaint them all. */
-  background: oklch(0.185 0.012 65 / 0.97);
+/* A rewrite in place of the code lines it re-expresses, between the code
+   segments around it. */
+.rw-card {
+  /* Tables size against the card, past the prose width. */
+  container-type: inline-size;
+  padding: 4px 10px 6px 13px;
+  border-left: 3px solid oklch(0.78 0.145 75 / 0.8);
+  background: oklch(0.185 0.012 65);
   box-shadow:
     inset 0 1px 0 oklch(0.78 0.145 75 / 0.1),
     inset 0 -1px 0 oklch(0.78 0.145 75 / 0.1);
-  transition: background 120ms;
 }
 
-.rw-overlay:hover {
-  background: oklch(0.205 0.014 65 / 0.985);
-}
-
-.rw-overlay:focus-visible {
-  outline: 1px solid var(--color-primary);
-  outline-offset: -1px;
-}
-
-/* The other columns of a covered region (deletions in split view). */
-.rw-mask {
-  position: absolute;
-  z-index: 5;
-  cursor: pointer;
-  background: oklch(0.17 0.01 65 / 0.96);
-}
-
-/* The toggle handles: same place whether the rewrite or the code is showing. */
-.rw-rail {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 12px;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.rw-rail::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
-  background: oklch(0.78 0.145 75 / 0.8);
-  transition:
-    width 120ms,
-    background 120ms;
-}
-
-.rw-rail:hover::before {
-  width: 6px;
-  background: var(--color-primary);
+/* Rewrite, controls and comments keep a readable measure, centred in the
+   card even across both columns of split view. */
+.rw-body {
+  max-width: 60em;
+  margin-inline: auto;
+  font-size: 13px;
 }
 
 .rw-switch {
@@ -340,7 +297,6 @@ body::before {
   font-size: 10px;
   letter-spacing: 0.04em;
   cursor: pointer;
-  pointer-events: auto;
   color: oklch(0.86 0.1 78);
   background: oklch(0.22 0.02 70 / 0.9);
   transition:
@@ -351,19 +307,6 @@ body::before {
 .rw-switch:hover {
   color: var(--color-primary-foreground);
   background: var(--color-primary);
-}
-
-.rw-revealed .rw-switch {
-  position: absolute;
-  top: 1px;
-  right: 8px;
-  color: var(--color-primary-foreground);
-  background: var(--color-primary);
-  box-shadow: 0 2px 8px oklch(0 0 0 / 0.35);
-}
-
-.rw-revealed .rw-switch:hover {
-  filter: brightness(1.1);
 }
 
 /* Floats so that only the first line of the rewrite makes room for it; what
@@ -389,7 +332,8 @@ body::before {
   transition: opacity 120ms;
 }
 
-.rw-overlay:hover .rw-comment {
+.rw-card:hover .rw-comment,
+.rw-comment:focus-visible {
   opacity: 1;
 }
 
@@ -397,15 +341,33 @@ body::before {
   color: var(--color-foreground);
 }
 
-/* A lifted rewrite keeps its rail and switch, and tints the code it covered. */
-.rw-revealed {
-  position: absolute;
-  z-index: 4;
-  pointer-events: none;
-  background: oklch(0.78 0.145 75 / 0.035);
-  box-shadow:
-    inset 0 1px 0 oklch(0.78 0.145 75 / 0.25),
-    inset 0 -1px 0 oklch(0.78 0.145 75 / 0.25);
+/* Comments on the covered lines, and the comment form. */
+.rw-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+/* Heads the code of an expanded rewrite. */
+.rw-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3px 10px 3px 13px;
+  border-left: 3px solid oklch(0.78 0.145 75 / 0.8);
+  background: oklch(0.78 0.145 75 / 0.06);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.rw-bar-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: oklch(0.6 0.03 75);
 }
 
 .rw-text {
@@ -492,12 +454,15 @@ body::before {
   color: oklch(0.84 0.02 80);
 }
 
-.rw-folded {
-  min-width: 3ch;
-  text-align: right;
-}
-
+/* As wide as its columns need, up to the whole card and centred on the
+   text; scrolls beyond that. */
 .rw-table {
+  position: relative;
+  left: 50%;
+  translate: -50% 0;
+  width: max-content;
+  min-width: 100%;
+  max-width: 100cqw;
   overflow-x: auto;
 }
 

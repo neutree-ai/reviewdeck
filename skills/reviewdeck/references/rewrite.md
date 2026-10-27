@@ -46,7 +46,8 @@ Use Markdown (GFM). Keep a block short; if the rewrite is not much shorter than 
 - Bigger folds are fine when the lines share one intent a reviewer checks as a whole: one test function, an import block, a mechanical sweep in one place.
 - Pull blank lines next to a fold into it, so no lone blank line is left between folds.
 - Don't fold a line whose code is already the clearest notation (`"-T",`, `return err`). Leave it as code.
-- A block's `changes` must belong to its group; blocks in a group must not overlap. Prefer contiguous `changes`; a block spread over several places shows its text only at the first one.
+- A block's `changes` must belong to its group; blocks in a group must not overlap.
+- A block covers one contiguous stretch of its group's changes: no other change of the group may fall between its first and last change, or `split` rejects it. Unchanged lines and other groups' changes in between are fine, so one block can take the same mechanical edit in several nearby places. The review UI shows the block in place of everything from its first to its last line.
 - `title` is optional; at line level the rewrite line usually needs none.
 
 ## Format

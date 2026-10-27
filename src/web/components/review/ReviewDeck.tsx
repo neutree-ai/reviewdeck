@@ -29,7 +29,7 @@ import {
   InlineCommentForm,
   type ManualComment,
 } from "./annotations";
-import { RewriteOverlays, inRegion, regionEnd, type OverlayRegion } from "./RewriteOverlay";
+import { RewriteBar, RewriteCard } from "./RewriteCard";
 import type {
   AgentDraftComment,
   AgentDraftCommentDecision,
@@ -39,6 +39,7 @@ import type {
   ReviewSubmission,
 } from "../../../core/types";
 import { rewriteCoverage } from "../../../core/split";
+import { segmentPatch, type PatchSegment } from "../../../core/segment";
 
 const DIFF_STYLE_STORAGE_KEY = "reviewdeck:review:diff-style";
 const DIFF_WRAP_STORAGE_KEY = "reviewdeck:review:diff-wrap";
@@ -72,8 +73,92 @@ type AnnotationMeta =
   | { kind: "draft"; draft: AgentDraftCommentDecision }
   | { kind: "pending" };
 
-function annotationDomId(meta: Extract<AnnotationMeta, { kind: "comment" | "draft" }>): string {
+type NoteMeta = Extract<AnnotationMeta, { kind: "comment" | "draft" }>;
+
+function annotationDomId(meta: NoteMeta): string {
   return meta.kind === "comment" ? `manual-${meta.globalIndex}` : `draft-${meta.draft.id}`;
+}
+
+/** A comment or agent draft, wherever it shows: under a diff line or a rewrite. */
+function Note({
+  meta,
+  onDeleteComment,
+  onSetDraftStatus,
+}: {
+  meta: NoteMeta;
+  onDeleteComment: (commentIndex: number) => void;
+  onSetDraftStatus: (draftId: string, status: AgentDraftCommentDecision["status"]) => void;
+}) {
+  return (
+    <div className="annotation-anchor" data-annotation-id={annotationDomId(meta)}>
+      {meta.kind === "draft" ? (
+        <DraftCommentBubble
+          draft={meta.draft}
+          onSetStatus={(status) => onSetDraftStatus(meta.draft.id, status)}
+        />
+      ) : (
+        <CommentBubble comment={meta.comment} onDelete={() => onDeleteComment(meta.commentIndex)} />
+      )}
+    </div>
+  );
+}
+
+/** The comments and drafts of a file that pass `includes`, in line order. */
+function notesOf(
+  fileName: string,
+  commentEntries: CommentEntry[],
+  draftComments: AgentDraftCommentDecision[],
+  includes: (side: ReviewSide, line: number) => boolean,
+): { side: ReviewSide; line: number; meta: NoteMeta }[] {
+  const notes: { side: ReviewSide; line: number; meta: NoteMeta }[] = [];
+  commentEntries.forEach((entry, i) => {
+    const { file, side, line } = entry.comment;
+    if (file !== fileName || !includes(side, line)) return;
+    notes.push({
+      side,
+      line,
+      meta: {
+        kind: "comment",
+        comment: entry.comment,
+        commentIndex: i,
+        globalIndex: entry.globalIndex,
+      },
+    });
+  });
+  for (const draft of draftComments) {
+    if (draft.file !== fileName || !includes(draft.side, draft.line)) continue;
+    notes.push({ side: draft.side, line: draft.line, meta: { kind: "draft", draft } });
+  }
+  return notes;
+}
+
+const everyLine = () => true;
+
+function inSegment(segment: PatchSegment, side: ReviewSide, line: number): boolean {
+  const range = side === "additions" ? segment.additions : segment.deletions;
+  return range !== undefined && line >= range[0] && line <= range[1];
+}
+
+/**
+ * Rewrite mode renders a file in segments, each parsed as a patch of its own:
+ * the first hunk follows the previous segment, not the file start, so only
+ * the lines in between count as collapsed before it.
+ */
+function withGapBefore(file: FileDiffMetadata, gap: number): FileDiffMetadata {
+  const first = file.hunks[0];
+  if (!first) return file;
+  const shift = gap - first.collapsedBefore;
+  return {
+    ...file,
+    splitLineCount: file.splitLineCount + shift,
+    unifiedLineCount: file.unifiedLineCount + shift,
+    hunks: file.hunks.map((hunk, k) => ({
+      ...hunk,
+      collapsedBefore: k === 0 ? gap : hunk.collapsedBefore,
+      splitLineStart: hunk.splitLineStart + shift,
+      unifiedLineStart: hunk.unifiedLineStart + shift,
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -271,13 +356,6 @@ function CommentStatusCard({
   );
 }
 
-/** Rewrite overlays for one file: the regions they cover and which are lifted. */
-interface FileRewrites {
-  regions: OverlayRegion[];
-  revealed: Set<string>;
-  onToggle: (blockId: string) => void;
-}
-
 /** Rewrite state shared by all files of a sub-patch. */
 interface RewriteContext {
   blocks: ResolvedRewriteBlock[];
@@ -287,7 +365,7 @@ interface RewriteContext {
 
 function DiffBody({
   fileDiff,
-  rewrites,
+  includes = everyLine,
   commentEntries,
   draftComments,
   diffStyle,
@@ -298,7 +376,8 @@ function DiffBody({
   onSetDraftStatus,
 }: {
   fileDiff: FileDiffMetadata;
-  rewrites?: FileRewrites;
+  /** Lines this diff shows, when it is one segment of a file. */
+  includes?: (side: ReviewSide, line: number) => boolean;
   commentEntries: CommentEntry[];
   draftComments: AgentDraftCommentDecision[];
   diffStyle: "unified" | "split";
@@ -308,58 +387,28 @@ function DiffBody({
   onDeleteComment: (commentIndex: number) => void;
   onSetDraftStatus: (draftId: string, status: AgentDraftCommentDecision["status"]) => void;
 }) {
-  // State, not a ref: the overlays measure in a layout effect that runs before
-  // a parent ref would be attached.
-  const [wrapEl, setWrapEl] = useState<HTMLDivElement | null>(null);
   const fileName = fileDiff.name;
   const [pendingLine, setPendingLine] = useState<{
     line: number;
     side: "additions" | "deletions";
   } | null>(null);
 
-  // While a rewrite covers a line, its annotations move below the covered
-  // region so they stay visible.
-  const place = useCallback(
-    (side: ReviewSide, line: number) => {
-      const covered = rewrites?.regions.find(
-        ({ block, region }) => !rewrites.revealed.has(block.id) && inRegion(region, side, line),
-      );
-      return covered ? regionEnd(covered.region) : { side, line };
-    },
-    [rewrites],
-  );
-
   const annotations: DiffLineAnnotation<AnnotationMeta>[] = useMemo(() => {
-    const result: DiffLineAnnotation<AnnotationMeta>[] = [];
-
-    commentEntries.forEach((entry, i) => {
-      if (entry.comment.file !== fileName) return;
-      const at = place(entry.comment.side, entry.comment.line);
-      result.push({
-        side: at.side,
-        lineNumber: at.line,
-        metadata: {
-          kind: "comment",
-          comment: entry.comment,
-          commentIndex: i,
-          globalIndex: entry.globalIndex,
-        },
-      });
-    });
-
-    draftComments.forEach((draft) => {
-      if (draft.file !== fileName) return;
-      const at = place(draft.side, draft.line);
-      result.push({ side: at.side, lineNumber: at.line, metadata: { kind: "draft", draft } });
-    });
-
+    const result: DiffLineAnnotation<AnnotationMeta>[] = notesOf(
+      fileName,
+      commentEntries,
+      draftComments,
+      includes,
+    ).map(({ side, line, meta }) => ({ side, lineNumber: line, metadata: meta }));
     if (pendingLine) {
-      const at = place(pendingLine.side, pendingLine.line);
-      result.push({ side: at.side, lineNumber: at.line, metadata: { kind: "pending" } });
+      result.push({
+        side: pendingLine.side,
+        lineNumber: pendingLine.line,
+        metadata: { kind: "pending" },
+      });
     }
-
     return result;
-  }, [commentEntries, draftComments, fileName, pendingLine, place]);
+  }, [commentEntries, draftComments, fileName, includes, pendingLine]);
 
   const options = useMemo(
     () => ({
@@ -407,53 +456,136 @@ function DiffBody({
         );
       }
 
-      const meta = ann.metadata;
-      const inner =
-        meta.kind === "draft" ? (
-          <DraftCommentBubble
-            draft={meta.draft}
-            onSetStatus={(status) => onSetDraftStatus(meta.draft.id, status)}
-          />
-        ) : (
-          <CommentBubble
-            comment={meta.comment}
-            onDelete={() => onDeleteComment(meta.commentIndex)}
-          />
-        );
-
       return (
-        <div className="annotation-anchor" data-annotation-id={annotationDomId(meta)}>
-          {inner}
-        </div>
+        <Note
+          meta={ann.metadata}
+          onDeleteComment={onDeleteComment}
+          onSetDraftStatus={onSetDraftStatus}
+        />
       );
     },
     [fileName, onAddComment, onDeleteComment, onSetDraftStatus],
   );
 
   return (
-    <div ref={setWrapEl} className="relative">
-      <FileDiff
-        fileDiff={fileDiff}
-        options={options}
-        lineAnnotations={annotations}
-        renderAnnotation={renderAnnotation}
-      />
-      {rewrites && !viewed && (
-        <RewriteOverlays
-          wrap={wrapEl}
-          regions={rewrites.regions}
-          revealed={rewrites.revealed}
-          onToggle={rewrites.onToggle}
-          onComment={(block) => setPendingLine(place(block.anchor.side, block.anchor.line))}
-        />
-      )}
-    </div>
+    <FileDiff
+      fileDiff={fileDiff}
+      options={options}
+      lineAnnotations={annotations}
+      renderAnnotation={renderAnnotation}
+    />
   );
+}
+
+/**
+ * A file in rewrite mode: code segments and rewrite cards in reading order.
+ * A card replaces the code it stands for; expanding it shows that code under
+ * a bar that switches back.
+ */
+function RewriteFlow({
+  fileName,
+  segments,
+  rewrite,
+  commentEntries,
+  draftComments,
+  diffStyle,
+  wrap,
+  onAddComment,
+  onDeleteComment,
+  onSetDraftStatus,
+}: {
+  fileName: string;
+  segments: PatchSegment[];
+  rewrite: RewriteContext;
+  commentEntries: CommentEntry[];
+  draftComments: AgentDraftCommentDecision[];
+  diffStyle: "unified" | "split";
+  wrap: boolean;
+  onAddComment: (comment: Omit<ManualComment, "sub" | "source">) => void;
+  onDeleteComment: (commentIndex: number) => void;
+  onSetDraftStatus: (draftId: string, status: AgentDraftCommentDecision["status"]) => void;
+}) {
+  const diffs = useMemo(
+    () =>
+      segments.map((segment) =>
+        withGapBefore(parsePatchFiles(segment.diff)[0]!.files[0]!, segment.gapBefore),
+      ),
+    [segments],
+  );
+  const includes = useMemo(
+    () =>
+      segments.map((segment) => (side: ReviewSide, line: number) => inSegment(segment, side, line)),
+    [segments],
+  );
+  const blocks = useMemo(
+    () => new Map(rewrite.blocks.map((block) => [block.id, block])),
+    [rewrite.blocks],
+  );
+  // The card whose comment form is open.
+  const [commenting, setCommenting] = useState<string | null>(null);
+
+  return segments.map((segment, i) => {
+    const block = segment.block ? blocks.get(segment.block) : undefined;
+    if (block && !rewrite.revealed.has(block.id)) {
+      // A comment on a rewrite lands on its first line, here or in this file.
+      const anchor =
+        block.anchor.file === fileName
+          ? block.anchor
+          : segment.additions
+            ? { side: "additions" as const, line: segment.additions[0] }
+            : { side: "deletions" as const, line: segment.deletions![0] };
+      return (
+        <RewriteCard
+          key={i}
+          block={block}
+          lines={segment.changed}
+          onShowCode={() => rewrite.onToggle(block.id)}
+          onComment={() => setCommenting(block.id)}
+        >
+          {notesOf(fileName, commentEntries, draftComments, includes[i]!).map(({ meta }) => (
+            <Note
+              key={annotationDomId(meta)}
+              meta={meta}
+              onDeleteComment={onDeleteComment}
+              onSetDraftStatus={onSetDraftStatus}
+            />
+          ))}
+          {commenting === block.id && (
+            <InlineCommentForm
+              onSubmit={(body) => {
+                onAddComment({ file: fileName, line: anchor.line, side: anchor.side, body });
+                setCommenting(null);
+              }}
+              onCancel={() => setCommenting(null)}
+            />
+          )}
+        </RewriteCard>
+      );
+    }
+    return (
+      <React.Fragment key={i}>
+        {block && <RewriteBar block={block} onShowRewrite={() => rewrite.onToggle(block.id)} />}
+        <DiffBody
+          fileDiff={diffs[i]!}
+          includes={includes[i]}
+          commentEntries={commentEntries}
+          draftComments={draftComments}
+          diffStyle={diffStyle}
+          wrap={wrap}
+          viewed={false}
+          onAddComment={onAddComment}
+          onDeleteComment={onDeleteComment}
+          onSetDraftStatus={onSetDraftStatus}
+        />
+      </React.Fragment>
+    );
+  });
 }
 
 function FileDiffView({
   fileDiff,
   rewrite,
+  segments,
   commentEntries,
   draftComments,
   diffStyle,
@@ -466,6 +598,8 @@ function FileDiffView({
 }: {
   fileDiff: FileDiffMetadata;
   rewrite?: RewriteContext;
+  /** In rewrite mode, the file cut into code and rewrite segments. */
+  segments?: PatchSegment[];
   commentEntries: CommentEntry[];
   draftComments: AgentDraftCommentDecision[];
   diffStyle: "unified" | "split";
@@ -485,23 +619,6 @@ function FileDiffView({
     });
     return { additions, deletions };
   }, [fileDiff.hunks]);
-
-  const regions = useMemo(
-    () =>
-      rewrite?.blocks.flatMap((block) =>
-        block.regions
-          .filter((region) => region.file === fileDiff.name)
-          .map((region, i) => ({ key: `${block.id}:${i}`, block, region })),
-      ),
-    [rewrite?.blocks, fileDiff.name],
-  );
-  const fileRewrites = useMemo(
-    () =>
-      rewrite && regions?.length
-        ? { regions, revealed: rewrite.revealed, onToggle: rewrite.onToggle }
-        : undefined,
-    [rewrite, regions],
-  );
 
   return (
     <div
@@ -540,18 +657,34 @@ function FileDiffView({
         </div>
       </div>
       <div className="overflow-hidden rounded-b-lg">
-        <DiffBody
-          fileDiff={fileDiff}
-          rewrites={fileRewrites}
-          commentEntries={commentEntries}
-          draftComments={draftComments}
-          diffStyle={diffStyle}
-          wrap={wrap}
-          viewed={viewed}
-          onAddComment={onAddComment}
-          onDeleteComment={onDeleteComment}
-          onSetDraftStatus={onSetDraftStatus}
-        />
+        {rewrite && segments ? (
+          !viewed && (
+            <RewriteFlow
+              fileName={fileDiff.name}
+              segments={segments}
+              rewrite={rewrite}
+              commentEntries={commentEntries}
+              draftComments={draftComments}
+              diffStyle={diffStyle}
+              wrap={wrap}
+              onAddComment={onAddComment}
+              onDeleteComment={onDeleteComment}
+              onSetDraftStatus={onSetDraftStatus}
+            />
+          )
+        ) : (
+          <DiffBody
+            fileDiff={fileDiff}
+            commentEntries={commentEntries}
+            draftComments={draftComments}
+            diffStyle={diffStyle}
+            wrap={wrap}
+            viewed={viewed}
+            onAddComment={onAddComment}
+            onDeleteComment={onDeleteComment}
+            onSetDraftStatus={onSetDraftStatus}
+          />
+        )}
       </div>
     </div>
   );
@@ -605,6 +738,19 @@ function SubPatchView({
         ? { blocks: patch.rewrites!, revealed: expandedRewrites, onToggle: onToggleRewrite }
         : undefined,
     [showRewrites, patch.rewrites, expandedRewrites, onToggleRewrite],
+  );
+
+  // Files with at least one rewrite, cut into code and rewrite segments.
+  const segmentsByFile = useMemo(
+    () =>
+      showRewrites
+        ? new Map(
+            segmentPatch(patch.diff, patch.rewrites!)
+              .filter((file) => file.segments.some((segment) => segment.block))
+              .map((file) => [file.file, file.segments]),
+          )
+        : undefined,
+    [showRewrites, patch.diff, patch.rewrites],
   );
 
   const blockIds = patch.rewrites?.map((block) => block.id) ?? [];
@@ -710,8 +856,8 @@ function SubPatchView({
               className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
               title={
                 allExpanded
-                  ? "Lay every rewrite back over its code"
-                  : "Reveal the code under every rewrite"
+                  ? "Show every rewrite in place of its code"
+                  : "Show the code of every rewrite"
               }
             >
               <Code2 className="size-3" />
@@ -739,6 +885,7 @@ function SubPatchView({
             key={fd.name}
             fileDiff={fd}
             rewrite={rewriteContext}
+            segments={segmentsByFile?.get(fd.name)}
             commentEntries={commentEntries}
             draftComments={draftComments}
             diffStyle={diffStyle}

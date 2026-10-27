@@ -672,6 +672,25 @@ describe("rewrites", () => {
       "Group 1: rewrite 2 is missing rewrite",
       "Group 1: rewrite 2: change 4 is not assigned to this group",
       "Group 1: rewrite 2: change 1 is already covered by another rewrite",
+      "Group 1: rewrite 2: change 2-3 of this group falls between its changes; a rewrite must cover one contiguous stretch",
+    ]);
+  });
+
+  it("requires a block to cover one stretch of its group's changes", () => {
+    const meta = (rewrite: ChangeItem[]): SplitMeta => ({
+      groups: [
+        {
+          description: "first",
+          changes: [0, 1, 4, 5],
+          rewrites: [{ changes: rewrite, rewrite: "x" }],
+        },
+        { description: "second", changes: ["2-3"] },
+      ],
+    });
+    // Other groups' changes are not in this sub-patch, so skipping them is fine.
+    expect(validateMeta(meta([1, 4]), 6)).toEqual([]);
+    expect(validateMeta(meta([0, 4]), 6)).toEqual([
+      "Group 1: rewrite 1: change 1 of this group falls between its changes; a rewrite must cover one contiguous stretch",
     ]);
   });
 
@@ -699,19 +718,25 @@ describe("rewrites", () => {
     expect(block!.regions).toEqual([{ file: "foo.py", deletions: [4, 6], additions: [4, 6] }]);
   });
 
-  it("splits a block into one region per contiguous run", () => {
-    const [inner, outer] = regionsOf([{ changes: ["2-3"] }, { changes: ["0-1", "4-5"] }]);
-    expect(inner!.regions).toEqual([{ file: "foo.py", deletions: [4, 4], additions: [4, 4] }]);
-    expect(outer!.regions).toEqual([
-      { file: "foo.py", deletions: [2, 2], additions: [2, 2] },
-      { file: "foo.py", deletions: [6, 6], additions: [6, 6] },
-    ]);
+  it("joins a block across another group's changes, which its sub-patch lacks", () => {
+    const meta: SplitMeta = {
+      groups: [
+        {
+          description: "first",
+          changes: [0, 1, 4, 5],
+          rewrites: [{ changes: ["0-1", "4-5"], rewrite: "x" }],
+        },
+        { description: "second", changes: ["2-3"] },
+      ],
+    };
+    const [block] = resolveGroupRewrites(meta, generateSubPatches(patch, meta))[0]!.rewrites!;
+    expect(block!.regions).toEqual([{ file: "foo.py", deletions: [2, 6], additions: [2, 6] }]);
   });
 
   it("counts the change lines rewrites cover", () => {
     const meta: SplitMeta = {
       groups: [
-        { description: "all", changes: ["0-5"], rewrites: [{ changes: ["0-1", 4], rewrite: "x" }] },
+        { description: "all", changes: ["0-5"], rewrites: [{ changes: ["0-2"], rewrite: "x" }] },
       ],
     };
     const [sub] = generateSubPatches(patch, meta);

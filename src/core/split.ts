@@ -224,6 +224,16 @@ export function validateMeta(meta: SplitMeta, totalChanges: number): string[] {
       for (const range of collapseRanges(overlap.sort((a, b) => a - b))) {
         errors.push(`${label}: change ${range} is already covered by another rewrite`);
       }
+      // The review UI shows a rewrite in place of one stretch of its
+      // sub-patch, so no other change of the group may fall inside it.
+      const own = new Set(blockChanges);
+      const [first, last] = [Math.min(...blockChanges), Math.max(...blockChanges)];
+      const inside = [...groupChanges].filter((idx) => idx > first && idx < last && !own.has(idx));
+      for (const range of collapseRanges(inside.sort((a, b) => a - b))) {
+        errors.push(
+          `${label}: change ${range} of this group falls between its changes; a rewrite must cover one contiguous stretch`,
+        );
+      }
       for (const idx of blockChanges) rewritten.add(idx);
     }
   }
