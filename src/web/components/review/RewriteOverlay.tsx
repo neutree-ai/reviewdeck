@@ -77,16 +77,29 @@ function clearFolds(root: ShadowRoot) {
  * column has and this one lacks. Folding rows out of the other column takes
  * as many rows out of the filler.
  */
-const isFiller = (cell: Element) => cell.hasAttribute("data-buffer-size");
+const isFiller = (cell: Element) => cell.hasAttribute("data-buffer-size") && !isAnnotation(cell);
 
-function shrinkFiller(cell: HTMLElement, rows: number) {
+/**
+ * Annotation rows (comments) are never folded. The diff syncs their height
+ * across split columns from what is rendered, so hiding them would feed back
+ * into the layout the next pass measures.
+ */
+const isAnnotation = (cell: Element) =>
+  cell.hasAttribute("data-line-annotation") ||
+  cell.getAttribute("data-gutter-buffer") === "annotation";
+
+/**
+ * A filler's height is its min-height (border-box), so padding would not add
+ * to it: a pad goes into the min-height instead.
+ */
+function fitFiller(cell: HTMLElement, rows: number, pad: number) {
   if (rows <= 0) {
     cell.setAttribute(HIDE, "");
     return;
   }
   if (!cell.hasAttribute(SPAN)) cell.setAttribute(SPAN, cell.getAttribute("style") ?? "");
   cell.style.gridRow = `span ${rows}`;
-  cell.style.minHeight = `calc(${rows} * 1lh)`;
+  cell.style.minHeight = `calc(${rows} * 1lh + ${pad}px)`;
 }
 
 /**
@@ -190,6 +203,34 @@ function layoutRegions(
       const lines = rowLines(cell);
       return within(lines.old, region.deletions) || within(lines.new, region.additions);
     });
+  /**
+   * A region's rows and where its layer ends in each column. In split view
+   * the rows beside a region's tail can be lines outside it (the start of
+   * the next change): a column's layer ends above the first of them, so they
+   * stay readable.
+   */
+  const extentOf = (region: RewriteRegion, all: ReturnType<typeof cells>) => {
+    const rows = rowsOf(region, all);
+    if (rows.length === 0) return undefined;
+    const own = new Set(rows.map((r) => r.cell));
+    const top = Math.min(...rows.map((r) => r.rect.top));
+    const bottom = Math.max(...rows.map((r) => r.rect.bottom));
+    const endIn = (code: HTMLElement) =>
+      Math.min(
+        bottom,
+        ...all
+          .filter(
+            (c) =>
+              c.code === code &&
+              c.cell.hasAttribute("data-line") &&
+              !own.has(c.cell) &&
+              c.rect.top > top + 0.5 &&
+              c.rect.top < bottom - 0.5,
+          )
+          .map((c) => c.rect.top),
+      );
+    return { rows, top, endIn };
+  };
 
   // Fit pass, against the natural layout.
   const natural = cells();
@@ -199,10 +240,11 @@ function layoutRegions(
   const pads = new Map<HTMLElement, number>();
   for (const { key, block, region } of regions) {
     if (revealed.has(block.id)) continue;
-    const rows = rowsOf(region, natural);
-    if (rows.length === 0) continue;
-    const top = Math.min(...rows.map((r) => r.rect.top));
-    const bottom = Math.max(...rows.map((r) => r.rect.bottom));
+    const extent = extentOf(region, natural);
+    if (!extent) continue;
+    const { top } = extent;
+    // Fold and pad only above lines outside the region, in any column.
+    const bottom = Math.min(...codes.map(extent.endIn));
     const text = el.querySelector<HTMLElement>(`[data-rw-key="${CSS.escape(key)}"] .rw-text`);
     if (!text) continue;
     const target = top + Math.max(text.offsetHeight, 1);
@@ -225,16 +267,24 @@ function layoutRegions(
             ),
         );
       if (cut === undefined || cut >= bottom - 0.5) continue;
-      const hidden = band.filter((c) => !isFiller(c.cell) && c.rect.top >= cut - 0.5);
+      const hidden = band.filter(
+        (c) => !isFiller(c.cell) && !isAnnotation(c.cell) && c.rect.top >= cut - 0.5,
+      );
       for (const { cell } of hidden) cell.setAttribute(HIDE, "");
-      for (const { cell, rect } of fillers) {
-        const overlap = Math.min(rect.bottom, bottom) - Math.max(rect.top, cut);
-        if (overlap <= 0.5) continue;
-        const size = Number(cell.getAttribute("data-buffer-size")) || 1;
-        fillerCuts.set(
-          cell,
-          (fillerCuts.get(cell) ?? 0) + Math.round(overlap / (rect.height / size)),
-        );
+      // Count the rows hidden beside each filler rather than divide its
+      // height: wrapped rows make the rows it spans uneven.
+      for (const { cell, code, rect } of fillers) {
+        const rows = new Set(
+          hidden
+            .filter(
+              (c) =>
+                c.code !== code &&
+                c.rect.top >= rect.top - 0.5 &&
+                c.rect.bottom <= rect.bottom + 0.5,
+            )
+            .map((c) => Math.round(c.rect.top)),
+        ).size;
+        if (rows) fillerCuts.set(cell, (fillerCuts.get(cell) ?? 0) + rows);
       }
       folded.set(
         key,
@@ -246,7 +296,10 @@ function layoutRegions(
         ),
       );
     } else if (target > bottom + 0.5) {
-      for (const { cell, rect } of [...band, ...fillers]) {
+      // A filler as tall as the region is in both lists; pad it once.
+      for (const { cell, rect } of new Map(
+        [...band, ...fillers].map((c) => [c.cell, c]),
+      ).values()) {
         // Cells ending with the region, and fillers running past its end.
         if (Math.abs(rect.bottom - bottom) > 0.5 && !(isFiller(cell) && rect.bottom > bottom))
           continue;
@@ -254,9 +307,14 @@ function layoutRegions(
       }
     }
   }
-  for (const [cell, rows] of fillerCuts)
-    shrinkFiller(cell, (Number(cell.getAttribute("data-buffer-size")) || 1) - rows);
+  for (const cell of new Set([...fillerCuts.keys(), ...pads.keys()].filter(isFiller)))
+    fitFiller(
+      cell,
+      (Number(cell.getAttribute("data-buffer-size")) || 1) - (fillerCuts.get(cell) ?? 0),
+      pads.get(cell) ?? 0,
+    );
   for (const [cell, pad] of pads) {
+    if (isFiller(cell)) continue;
     cell.setAttribute(PAD, "");
     cell.style.setProperty("--rw-pad", `${pad}px`);
   }
@@ -265,15 +323,20 @@ function layoutRegions(
   const fitted = cells();
   const layouts = new Map<string, Layout>();
   for (const { key, region } of regions) {
-    const rows = rowsOf(region, fitted);
-    if (rows.length === 0 || !textCode) continue;
-    const top = Math.min(...rows.map((r) => r.rect.top)) - origin.top;
-    const height = Math.max(...rows.map((r) => r.rect.bottom)) - origin.top - top;
+    const extent = extentOf(region, fitted);
+    if (!extent || !textCode) continue;
+    const box = (code: HTMLElement) => ({
+      top: extent.top - origin.top,
+      height: extent.endIn(code) - extent.top,
+      ...columnOf(code),
+    });
     layouts.set(key, {
-      text: { top, height, ...columnOf(textCode) },
+      text: box(textCode),
+      // Only columns holding some of the region's lines: beside an
+      // additions-only region the other column is filler and stays as is.
       masks: codes
-        .filter((code) => code !== textCode)
-        .map((code) => ({ top, height, ...columnOf(code) })),
+        .filter((code) => code !== textCode && extent.rows.some((r) => r.code === code))
+        .map(box),
       folded: folded.get(key) ?? 0,
     });
   }
