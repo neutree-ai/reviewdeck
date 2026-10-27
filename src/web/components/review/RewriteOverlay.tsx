@@ -1,5 +1,5 @@
-import React, { useLayoutEffect, useState } from "react";
-import Markdown from "react-markdown";
+import React, { useLayoutEffect, useRef, useState } from "react";
+import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BookOpenText, Code2, MessageSquarePlus } from "lucide-react";
 import type { ResolvedRewriteBlock, ReviewSide, RewriteRegion } from "../../../core/types";
@@ -280,6 +280,29 @@ function layoutRegions(
   return layouts;
 }
 
+/**
+ * Tables wider than the column scroll on their own instead of being clipped.
+ * A press that scrolled the table (its scrollbar) does not toggle the layer.
+ */
+function ScrollTable(props: React.ComponentProps<"table">) {
+  const pressedAt = useRef(0);
+  return (
+    <div
+      className="rw-table"
+      onPointerDown={(e) => (pressedAt.current = e.currentTarget.scrollLeft)}
+      onClick={(e) => {
+        if (e.currentTarget.scrollLeft !== pressedAt.current) e.stopPropagation();
+      }}
+    >
+      <table {...props} />
+    </div>
+  );
+}
+
+const markdownComponents: Components = {
+  table: ({ node: _, ...props }) => <ScrollTable {...props} />,
+};
+
 const boxStyle = (box: Box): React.CSSProperties => ({
   top: box.top,
   left: box.left,
@@ -378,16 +401,16 @@ export function RewriteOverlays({
               title="Show the code"
             >
               {rail}
-              <div className="rw-text">
-                {block.title && <strong className="rw-title">{block.title}</strong>}
-                <Markdown remarkPlugins={[remarkGfm]}>{block.rewrite}</Markdown>
-              </div>
               <div className="rw-meta">
-                {layout.folded > 0 && (
-                  <span title={`${layout.folded} more code lines folded under this rewrite`}>
-                    +{layout.folded}
-                  </span>
-                )}
+                {/* Always in place, so folding never changes the width the
+                    rewrite wraps in, and with it what gets folded. */}
+                <span
+                  className="rw-folded"
+                  style={{ visibility: layout.folded > 0 ? undefined : "hidden" }}
+                  title={`${layout.folded} more code lines folded under this rewrite`}
+                >
+                  +{layout.folded}
+                </span>
                 <button
                   className="rw-comment"
                   onClick={(e) => {
@@ -399,6 +422,12 @@ export function RewriteOverlays({
                   <MessageSquarePlus className="size-3.5" />
                 </button>
                 {toggleSwitch}
+              </div>
+              <div className="rw-text">
+                {block.title && <strong className="rw-title">{block.title}</strong>}
+                <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {block.rewrite}
+                </Markdown>
               </div>
             </div>
           </React.Fragment>
