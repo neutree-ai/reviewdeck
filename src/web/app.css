@@ -1,5 +1,8 @@
-@import "tailwindcss";
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+/* The NAP UI SDK (the /app chat) ships Tailwind class names, not CSS. */
+@source "../../node_modules/@neutree-ai/ui-sdk/dist";
 
 @theme {
   /* Warm dark palette — charcoal base with amber accent */
@@ -30,6 +33,18 @@
   --color-destructive-foreground: oklch(0.98 0.005 80);
   --color-success: oklch(0.65 0.17 155);
   --color-success-foreground: oklch(0.98 0.005 80);
+  --color-info: oklch(0.7 0.12 240);
+  --color-info-foreground: oklch(0.98 0.005 80);
+  --color-warning: oklch(0.8 0.15 85);
+  --color-warning-foreground: oklch(0.18 0.02 60);
+  --color-popover: oklch(0.205 0.01 60);
+  --color-popover-foreground: oklch(0.88 0.01 80);
+
+  /* Small sizes the NAP UI SDK uses */
+  --text-mini: 10px;
+  --text-mini--line-height: 14px;
+  --text-tiny: 11px;
+  --text-tiny--line-height: 15px;
 
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
@@ -579,4 +594,86 @@ body::before {
 
 .comment-progress-dot-omitted {
   background: oklch(0.48 0.02 255);
+}
+
+/* ------------------------------------------------------------------ */
+/* App: the agent's replies                                            */
+/* ------------------------------------------------------------------ */
+
+.chat-md {
+  line-height: 1.6;
+  color: oklch(0.9 0.01 80);
+}
+
+.chat-md > * + * {
+  margin-top: 0.6em;
+}
+
+.chat-md a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+.chat-md strong {
+  color: var(--color-foreground);
+  font-weight: 600;
+}
+
+.chat-md ul,
+.chat-md ol {
+  padding-left: 1.25em;
+}
+
+.chat-md ul {
+  list-style: disc;
+}
+
+.chat-md ol {
+  list-style: decimal;
+}
+
+.chat-md h1,
+.chat-md h2,
+.chat-md h3 {
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.chat-md code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: oklch(0.78 0.145 75 / 0.1);
+  color: oklch(0.86 0.1 78);
+}
+
+.chat-md pre {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  padding: 0.75em 1em;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-subtle);
+  background: oklch(0.165 0.008 60);
+  overflow-x: auto;
+}
+
+.chat-md pre code {
+  padding: 0;
+  background: none;
+  color: inherit;
+}
+
+.chat-md table {
+  display: block;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+.chat-md th,
+.chat-md td {
+  border: 1px solid var(--color-border);
+  padding: 0.25em 0.6em;
 }

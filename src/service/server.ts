@@ -11,8 +11,11 @@ import { createMcpRouter } from "./mcp/transport.ts";
 import { ReviewDeckOAuthProvider } from "./auth/provider.ts";
 import { createConsentRouter } from "./auth/consent.ts";
 import { createUpstreamRouter } from "./auth/upstream.ts";
-import { createApiAuthMiddleware, createOAuthMiddleware } from "./auth/middleware.ts";
+import { createApiAuthMiddleware, createMcpAuthMiddleware } from "./auth/middleware.ts";
+import { createAppAuthMiddleware } from "./auth/app-session.ts";
 import { initSigningKey } from "./auth/token.ts";
+import { createAppRoutes } from "./routes/app.ts";
+import { NapPlatform, napConfigFromEnv } from "./nap/platform.ts";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -68,6 +71,10 @@ export async function startServer(opts: ServerOptions): Promise<void> {
   initSigningKey(process.env.REVIEWDECK_JWT_SECRET);
   const provider = new ReviewDeckOAuthProvider(storage, baseUrl);
 
+  // Each user's review agent on NAP, when this server is registered there as an application
+  const napConfig = napConfigFromEnv();
+  const nap = napConfig ? new NapPlatform(napConfig) : undefined;
+
   // OAuth 2.1 endpoints (/.well-known/*, /authorize, /token, /register, /revoke)
   app.route(
     "/",
@@ -82,15 +89,30 @@ export async function startServer(opts: ServerOptions): Promise<void> {
   app.route("/auth", createConsentRouter(storage, provider));
   app.route("/auth/sso", createUpstreamRouter(storage, provider, baseUrl));
 
+  // The app's own pages sign in with a cookie; they come before the OAuth-guarded /api/*
+  app.use("/api/app/*", createAppAuthMiddleware(storage));
+  app.route("/api/app", createAppRoutes(storage, baseUrl, nap));
+
   // Auth middleware on /api/* and /mcp*
-  app.use("/api/*", createApiAuthMiddleware(provider, storage));
-  app.use("/mcp/*", createOAuthMiddleware(provider));
+  const apiAuth = createApiAuthMiddleware(provider, storage);
+  app.use("/api/*", async (c, next) =>
+    c.req.path.startsWith("/api/app/") ? next() : apiAuth(c, next),
+  );
+  app.use("/mcp/*", createMcpAuthMiddleware(provider, nap?.callers));
 
   // Mount API routes
-  app.route("/api", createReviewRoutes(storage, baseUrl));
+  app.route(
+    "/api",
+    createReviewRoutes(storage, baseUrl, {
+      onSubmitted: nap ? (session) => nap.notifySubmitted(session) : undefined,
+    }),
+  );
   app.route("/api", createIdpRoutes(storage));
   app.route("/", createHealthRoutes());
   app.route("/mcp", createMcpRouter(storage, baseUrl));
+
+  // The app lives under /app; the root has nothing of its own to show
+  app.get("/", (c) => c.redirect("/app"));
 
   // Static file serving (SPA fallback)
   app.get("*", async (c) => {
@@ -122,6 +144,11 @@ export async function startServer(opts: ServerOptions): Promise<void> {
     );
     console.error(
       `MCP endpoint: http://${host === "0.0.0.0" ? "localhost" : host}:${info.port}/mcp`,
+    );
+    console.error(
+      nap
+        ? `NAP application ${nap.config.clientId} at ${nap.config.baseUrl} (agent: ${nap.config.agent})`
+        : "NAP integration off (set RD_NAP_URL, RD_NAP_CLIENT_ID, RD_NAP_CLIENT_SECRET)",
     );
   });
 

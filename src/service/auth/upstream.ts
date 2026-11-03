@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { getSigningKey } from "./token.ts";
+import { appSessionCookie } from "./app-session.ts";
 import type { IdentityProvider } from "./types.ts";
 import type { ReviewDeckOAuthProvider } from "./provider.ts";
 import type { Storage } from "../storage/interface.ts";
@@ -112,8 +113,9 @@ export function createUpstreamRouter(
   // Start SSO flow — redirect to upstream authorize URL
   app.get("/start", async (c) => {
     const idpId = c.req.query("idp");
-    const reqId = c.req.query("req");
-    if (!idpId || !reqId) return c.json({ error: "Missing idp or req parameter" }, 400);
+    // Empty for a sign-in to the app itself rather than an OAuth request.
+    const reqId = c.req.query("req") ?? "";
+    if (!idpId) return c.json({ error: "Missing idp parameter" }, 400);
 
     const idp = await storage.getIdentityProvider(idpId);
     if (!idp) return c.json({ error: "Identity provider not found" }, 404);
@@ -214,6 +216,11 @@ export function createUpstreamRouter(
         createdAt: new Date(),
       };
       await storage.saveUser(user);
+    }
+
+    if (!state.reqId) {
+      c.header("Set-Cookie", await appSessionCookie(user.id));
+      return c.redirect("/app");
     }
 
     // Set session cookie and redirect to consent (same as local login)

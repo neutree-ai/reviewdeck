@@ -1,4 +1,5 @@
 import type { Context, Next } from "hono";
+import { CALLER_HEADER, type CallerVerifier } from "@neutree-ai/server-sdk";
 import type { ReviewDeckOAuthProvider } from "./provider.ts";
 import type { Storage } from "../storage/interface.ts";
 
@@ -53,5 +54,35 @@ export function createApiAuthMiddleware(provider: ReviewDeckOAuthProvider, stora
     }
 
     return oauthMiddleware(c, next);
+  };
+}
+
+/**
+ * Auth for /mcp: a caller the agent platform vouches for, or an OAuth Bearer token.
+ *
+ * NAP's MCP proxy signs every call to a server the application declared with
+ * `identify_caller` (X-Platform-Caller). The users the application provisioned
+ * can't sign in to NAP, so those calls carry no Authorization: the signed
+ * statement is the credential. Its `ext` is the user id this server gave the
+ * platform, and it sets `caller` so the transport can trust the session and
+ * workspace it names. A statement that is present but doesn't verify is
+ * refused, never passed on to OAuth.
+ */
+export function createMcpAuthMiddleware(
+  provider: ReviewDeckOAuthProvider,
+  callers: CallerVerifier | undefined,
+) {
+  const oauthMiddleware = createOAuthMiddleware(provider);
+
+  return async (c: Context, next: Next) => {
+    if (!callers || !c.req.header(CALLER_HEADER)) return oauthMiddleware(c, next);
+
+    const caller = await callers.verify(c.req.raw).catch(() => null);
+    if (!caller?.externalId) {
+      return c.json({ error: "Invalid or expired platform caller statement" }, 401);
+    }
+    c.set("userId", caller.externalId);
+    c.set("caller", caller);
+    return next();
   };
 }

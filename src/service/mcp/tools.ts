@@ -11,15 +11,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { parsePatch } from "../../core/patch.ts";
-import {
-  indexChanges,
-  validateMeta,
-  generateSubPatches,
-  resolveSplitGroupMeta,
-} from "../../core/split.ts";
 import type { SplitMeta } from "../../core/types.ts";
-import type { Storage, Session, SubPatchRecord } from "../storage/interface.ts";
+import { buildReview } from "../build-review.ts";
+import type { Storage, Session } from "../storage/interface.ts";
 
 function logTool(name: string, params: Record<string, unknown>, isError: boolean) {
   const status = isError ? "ERROR" : "OK";
@@ -37,14 +31,22 @@ function textResult(data: unknown, isError = false) {
   return result;
 }
 
+/** Who is calling, as the transport established it. */
+export interface ToolCaller {
+  userId: string;
+  agentId?: string;
+  agentSessionId?: string;
+  /** Set only when the platform vouched for the caller. */
+  agentWorkspaceId?: string;
+}
+
 export function registerTools(
   server: McpServer,
   storage: Storage,
   baseUrl: string,
-  userId: string,
-  headerAgentId?: string,
-  headerAgentSessionId?: string,
+  caller: ToolCaller,
 ): void {
+  const { userId } = caller;
   server.tool(
     "create_review",
     "Validate split metadata, generate sub-patches, and create a persistent review session. Returns sessionId and reviewUrl. Upload diffs first via POST /api/uploads.",
@@ -57,6 +59,18 @@ export function registerTools(
               description: z.string(),
               changes: z.array(z.union([z.number(), z.string()])),
               draftComments: z.array(z.object({ change: z.number(), body: z.string() })).optional(),
+              rewrites: z
+                .array(
+                  z.object({
+                    changes: z.array(z.union([z.number(), z.string()])),
+                    title: z.string().optional(),
+                    rewrite: z.string(),
+                  }),
+                )
+                .optional()
+                .describe(
+                  "Experimental: equivalent re-expressions (Markdown) the review UI shows in place of one contiguous stretch of the group's changes",
+                ),
             }),
           ),
         })
@@ -75,38 +89,21 @@ export function registerTools(
 
       try {
         const splitMeta = params.splitMeta as unknown as SplitMeta;
-        const patches = parsePatch(upload.diff);
-        const changes = indexChanges(patches);
-        const errors = validateMeta(splitMeta, changes.length);
-        if (errors.length > 0) {
+        const built = buildReview(upload.diff, splitMeta);
+        if (!built.ok) {
           logTool("create_review", params, true);
-          return textResult({ error: "Invalid split metadata", details: errors }, true);
+          return textResult({ error: "Invalid split metadata", details: built.errors }, true);
         }
-
-        const subs = generateSubPatches(upload.diff, splitMeta);
-        const groupMeta = resolveSplitGroupMeta(splitMeta, changes);
-
-        const subPatches: SubPatchRecord[] = subs.map((diff, i) => ({
-          index: i,
-          description: groupMeta[i]!.description,
-          diff,
-          draftComments: (groupMeta[i]!.draftComments ?? []).map((dc) => ({
-            id: randomUUID(),
-            change: dc.change,
-            file: dc.file,
-            line: dc.line,
-            side: dc.side,
-            body: dc.body,
-          })),
-        }));
+        const { subPatches } = built;
 
         const session: Session = {
           id: randomUUID(),
           reviewToken: randomUUID(),
           status: "reviewing",
           userId,
-          agentId: params.agentId ?? headerAgentId,
-          agentSessionId: headerAgentSessionId,
+          agentId: params.agentId ?? caller.agentId,
+          agentSessionId: caller.agentSessionId,
+          agentWorkspaceId: caller.agentWorkspaceId,
           splitMeta,
           subPatches,
           submission: null,
@@ -119,7 +116,12 @@ export function registerTools(
 
         const reviewUrl = `${baseUrl}/review/${session.id}?token=${session.reviewToken}`;
         logTool("create_review", params, false);
-        return textResult({ sessionId: session.id, reviewUrl, status: session.status });
+        return textResult({
+          sessionId: session.id,
+          reviewUrl,
+          status: session.status,
+          ...(built.rewriteCoverage.length > 0 && { rewriteCoverage: built.rewriteCoverage }),
+        });
       } catch (e: any) {
         logTool("create_review", params, true);
         return textResult({ error: e.message }, true);
@@ -146,7 +148,7 @@ export function registerTools(
       await storage.saveUploadToken({
         token,
         userId,
-        agentId: params.agentId ?? headerAgentId,
+        agentId: params.agentId ?? caller.agentId,
         expiresAt: Math.floor(Date.now() / 1000) + ttl,
         used: false,
       });
@@ -165,7 +167,7 @@ export function registerTools(
     },
     async (params) => {
       const session = await storage.getSession(params.sessionId);
-      if (!session) {
+      if (!session || session.userId !== userId) {
         logTool("get_review", params, true);
         return textResult({ error: "Session not found" }, true);
       }

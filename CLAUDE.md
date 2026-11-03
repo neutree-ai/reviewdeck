@@ -46,7 +46,10 @@ L0  src/core/       Pure computation — zero I/O, zero external deps
 L1  src/cli/        CLI entry point — file I/O, git, process control
 L2  src/web/        Web UI + API server (future)
     skills/         Published agent skills for `npx skills add`
+    nap/            App Spec, prompt and skill of the per-user review agent on NAP (deploy.ts publishes them)
 ```
+
+`src/service/nap/` is the server's side of NAP: provisioning users, their agent workspace, and handing submitted reviews back to the agent's conversation. Secrets for running it live outside the repo (`~/.config/reviewdeck/server.env`).
 
 ### Dependency rules (enforced by dependency-cruiser)
 

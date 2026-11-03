@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ReviewDeck, type SubPatch } from "./components/review/ReviewDeck";
 import { fetchPatches, submitReview } from "./data";
+import { AppShell } from "./app/AppShell";
 
 function App() {
   const [patches, setPatches] = useState<SubPatch[] | null>(null);
@@ -46,4 +47,8 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+// The service's app lives under /app; everything else (a review link, or the
+// CLI's local render at /) is a single review deck.
+const isApp = window.location.pathname === "/app" || window.location.pathname.startsWith("/app/");
+
+createRoot(document.getElementById("root")!).render(isApp ? <AppShell /> : <App />);

@@ -32,9 +32,12 @@ export class PostgresStorage implements Storage {
         updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
       )
     `;
-    // Existing deployments predate agent_session_id; add it on upgrade.
+    // Existing deployments predate these columns; add them on upgrade.
     await this.sql`
       ALTER TABLE sessions ADD COLUMN IF NOT EXISTS agent_session_id TEXT
+    `;
+    await this.sql`
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS agent_workspace_id TEXT
     `;
     await this.sql`
       CREATE INDEX IF NOT EXISTS idx_sessions_review_token ON sessions (review_token)
@@ -141,7 +144,7 @@ export class PostgresStorage implements Storage {
 
   async saveSession(session: Session): Promise<void> {
     await this.sql`
-      INSERT INTO sessions (id, review_token, status, user_id, agent_id, agent_session_id, split_meta, sub_patches, submission, created_at, updated_at)
+      INSERT INTO sessions (id, review_token, status, user_id, agent_id, agent_session_id, agent_workspace_id, split_meta, sub_patches, submission, created_at, updated_at)
       VALUES (
         ${session.id},
         ${session.reviewToken},
@@ -149,6 +152,7 @@ export class PostgresStorage implements Storage {
         ${session.userId},
         ${session.agentId ?? null},
         ${session.agentSessionId ?? null},
+        ${session.agentWorkspaceId ?? null},
         ${this.sql.json(session.splitMeta)},
         ${this.sql.json(session.subPatches)},
         ${session.submission ? this.sql.json(session.submission) : null},
@@ -160,7 +164,7 @@ export class PostgresStorage implements Storage {
 
   async getSession(id: string): Promise<Session | undefined> {
     const rows = await this.sql`
-      SELECT id, review_token, status, user_id, agent_id, agent_session_id, split_meta, sub_patches, submission, created_at, updated_at
+      SELECT id, review_token, status, user_id, agent_id, agent_session_id, agent_workspace_id, split_meta, sub_patches, submission, created_at, updated_at
       FROM sessions WHERE id = ${id}
     `;
     if (rows.length === 0) return undefined;
@@ -169,7 +173,7 @@ export class PostgresStorage implements Storage {
 
   async getSessionByToken(reviewToken: string): Promise<Session | undefined> {
     const rows = await this.sql`
-      SELECT id, review_token, status, user_id, agent_id, agent_session_id, split_meta, sub_patches, submission, created_at, updated_at
+      SELECT id, review_token, status, user_id, agent_id, agent_session_id, agent_workspace_id, split_meta, sub_patches, submission, created_at, updated_at
       FROM sessions WHERE review_token = ${reviewToken}
     `;
     if (rows.length === 0) return undefined;
@@ -194,31 +198,23 @@ export class PostgresStorage implements Storage {
     return this.getSession(id);
   }
 
-  async listSessions(filter?: {
-    userId?: string;
+  async listSessions(filter: {
+    userId: string;
     agentId?: string;
     agentSessionId?: string;
   }): Promise<Session[]> {
-    // Build the WHERE clause dynamically — postgres.js tagged-template lets us
-    // mix conditional fragments via `sql.unsafe`-free composition by chaining
-    // `sql` fragments. We use the simple approach: conditional pieces joined
-    // by AND so each filter is opt-in.
-    const conds: ReturnType<typeof this.sql>[] = [];
-    if (filter?.userId) conds.push(this.sql`user_id = ${filter.userId}`);
-    if (filter?.agentId) conds.push(this.sql`agent_id = ${filter.agentId}`);
-    if (filter?.agentSessionId) conds.push(this.sql`agent_session_id = ${filter.agentSessionId}`);
+    if (!filter.userId) throw new Error("listSessions requires a userId");
+    // Conditional fragments joined by AND; the owner is always one of them.
+    const conds: ReturnType<typeof this.sql>[] = [this.sql`user_id = ${filter.userId}`];
+    if (filter.agentId) conds.push(this.sql`agent_id = ${filter.agentId}`);
+    if (filter.agentSessionId) conds.push(this.sql`agent_session_id = ${filter.agentSessionId}`);
 
-    const rows = conds.length
-      ? await this.sql`
-          SELECT id, review_token, status, user_id, agent_id, agent_session_id, split_meta, sub_patches, submission, created_at, updated_at
-          FROM sessions
-          WHERE ${conds.reduce((acc, c) => this.sql`${acc} AND ${c}`)}
-          ORDER BY created_at DESC
-        `
-      : await this.sql`
-          SELECT id, review_token, status, user_id, agent_id, agent_session_id, split_meta, sub_patches, submission, created_at, updated_at
-          FROM sessions ORDER BY created_at DESC
-        `;
+    const rows = await this.sql`
+      SELECT id, review_token, status, user_id, agent_id, agent_session_id, agent_workspace_id, split_meta, sub_patches, submission, created_at, updated_at
+      FROM sessions
+      WHERE ${conds.reduce((acc, c) => this.sql`${acc} AND ${c}`)}
+      ORDER BY created_at DESC
+    `;
     return rows.map((row) => this.rowToSession(row));
   }
 
@@ -435,6 +431,7 @@ export class PostgresStorage implements Storage {
       userId: row.user_id,
       agentId: row.agent_id ?? undefined,
       agentSessionId: row.agent_session_id ?? undefined,
+      agentWorkspaceId: row.agent_workspace_id ?? undefined,
       splitMeta: row.split_meta,
       subPatches: row.sub_patches as SubPatchRecord[],
       submission: row.submission ?? null,

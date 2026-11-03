@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { randomBytes, randomUUID } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { hashPassword, verifyPassword, getSigningKey } from "./token.ts";
+import { appSessionCookie } from "./app-session.ts";
 import type { ReviewDeckOAuthProvider } from "./provider.ts";
 import type { Storage } from "../storage/interface.ts";
 
@@ -165,6 +166,12 @@ export function createConsentRouter(storage: Storage, provider: ReviewDeckOAuthP
       if (!valid) return errorRedirect("Invalid username or password");
       userId = user.id;
       resolvedUsername = user.username;
+    }
+
+    // No OAuth request: this is a sign-in to the reviewdeck app itself.
+    if (!reqId) {
+      c.header("Set-Cookie", await appSessionCookie(userId));
+      return c.redirect("/app");
     }
 
     // Set session cookie and redirect to consent page

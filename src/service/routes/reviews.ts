@@ -1,17 +1,21 @@
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { parsePatch } from "../../core/patch.ts";
-import {
-  indexChanges,
-  formatIndexedChanges,
-  validateMeta,
-  generateSubPatches,
-  resolveSplitGroupMeta,
-} from "../../core/split.ts";
+import { indexChanges, formatIndexedChanges } from "../../core/split.ts";
 import type { SplitMeta, ReviewSubmission } from "../../core/types.ts";
-import type { Storage, Session, SubPatchRecord } from "../storage/interface.ts";
+import { buildReview } from "../build-review.ts";
+import type { Storage, Session } from "../storage/interface.ts";
 
-export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
+export interface ReviewRouteHooks {
+  /** Told about each submission once it is stored. Errors are logged, never shown to the reviewer. */
+  onSubmitted?(session: Session): Promise<void>;
+}
+
+export function createReviewRoutes(
+  storage: Storage,
+  baseUrl: string,
+  hooks: ReviewRouteHooks = {},
+): Hono {
   const app = new Hono();
 
   // -----------------------------------------------------------------------
@@ -53,29 +57,11 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
     const upload = await storage.getUpload(fileId);
     if (!upload) return c.json({ error: "Upload not found" }, 404);
 
-    // Validate
-    const patches = parsePatch(upload.diff);
-    const changes = indexChanges(patches);
-    const errors = validateMeta(splitMeta, changes.length);
-    if (errors.length > 0) return c.json({ error: "Invalid split metadata", details: errors }, 400);
-
-    // Generate sub-patches
-    const subs = generateSubPatches(upload.diff, splitMeta);
-    const groupMeta = resolveSplitGroupMeta(splitMeta, changes);
-
-    const subPatches: SubPatchRecord[] = subs.map((diff, i) => ({
-      index: i,
-      description: groupMeta[i]!.description,
-      diff,
-      draftComments: (groupMeta[i]!.draftComments ?? []).map((dc) => ({
-        id: randomUUID(),
-        change: dc.change,
-        file: dc.file,
-        line: dc.line,
-        side: dc.side,
-        body: dc.body,
-      })),
-    }));
+    const built = buildReview(upload.diff, splitMeta);
+    if (!built.ok) {
+      return c.json({ error: "Invalid split metadata", details: built.errors }, 400);
+    }
+    const { subPatches } = built;
 
     const session: Session = {
       id: randomUUID(),
@@ -101,6 +87,7 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
         reviewUrl: `${baseUrl}/review/${session.id}?token=${session.reviewToken}`,
         status: session.status,
         patchCount: subPatches.length,
+        ...(built.rewriteCoverage.length > 0 && { rewriteCoverage: built.rewriteCoverage }),
       },
       201,
     );
@@ -110,8 +97,10 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
   // Get session status
   // -----------------------------------------------------------------------
   app.get("/reviews/:id", async (c) => {
+    const userId = (c.get("userId") as string) ?? "";
     const session = await storage.getSession(c.req.param("id"));
-    if (!session) return c.json({ error: "Session not found" }, 404);
+    // Someone else's session reads as missing, not forbidden: ids are not to be probed.
+    if (!session || session.userId !== userId) return c.json({ error: "Session not found" }, 404);
 
     return c.json({
       sessionId: session.id,
@@ -132,6 +121,7 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
   // -----------------------------------------------------------------------
   app.get("/sessions", async (c) => {
     const userId = (c.get("userId") as string) ?? "";
+    if (!userId) return c.json({ error: "Unauthorized" }, 401);
     const agentId = c.req.query("agentId");
     const agentSessionId = c.req.query("agentSessionId");
     const all = c.req.query("all") === "true";
@@ -143,7 +133,7 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
           agentId: agentId ?? undefined,
           agentSessionId: agentSessionId ?? undefined,
         };
-    const sessions = await storage.listSessions(userId ? filter : undefined);
+    const sessions = await storage.listSessions(filter);
 
     return c.json(
       sessions.map((s) => ({
@@ -181,6 +171,7 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
           source: "agent" as const,
           sub: sp.index,
         })),
+        rewrites: sp.rewrites,
       })),
     );
   });
@@ -194,8 +185,13 @@ export function createReviewRoutes(storage: Storage, baseUrl: string): Hono {
     if (session.status === "completed") return c.json({ error: "Already submitted" }, 409);
 
     const submission: ReviewSubmission = await c.req.json();
-    await storage.updateSession(session.id, { status: "completed", submission });
+    const updated = await storage.updateSession(session.id, { status: "completed", submission });
 
+    if (updated && hooks.onSubmitted) {
+      hooks.onSubmitted(updated).catch((e) => {
+        console.error(`[reviews] onSubmitted failed for session ${session.id}:`, e);
+      });
+    }
     return c.json({ ok: true });
   });
 

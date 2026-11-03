@@ -57,16 +57,16 @@ export class MemoryStorage implements Storage {
     return session;
   }
 
-  async listSessions(filter?: {
-    userId?: string;
+  async listSessions(filter: {
+    userId: string;
     agentId?: string;
     agentSessionId?: string;
   }): Promise<Session[]> {
-    let all = [...this.sessions.values()];
-    if (filter?.userId) all = all.filter((s) => s.userId === filter.userId);
-    if (filter?.agentId) all = all.filter((s) => s.agentId === filter.agentId);
-    if (filter?.agentSessionId) all = all.filter((s) => s.agentSessionId === filter.agentSessionId);
-    return all;
+    if (!filter.userId) throw new Error("listSessions requires a userId");
+    let all = [...this.sessions.values()].filter((s) => s.userId === filter.userId);
+    if (filter.agentId) all = all.filter((s) => s.agentId === filter.agentId);
+    if (filter.agentSessionId) all = all.filter((s) => s.agentSessionId === filter.agentSessionId);
+    return all.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   // --- Auth: Users ---

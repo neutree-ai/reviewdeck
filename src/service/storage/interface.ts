@@ -1,4 +1,4 @@
-import type { ReviewSubmission, SplitMeta } from "../../core/types.ts";
+import type { ResolvedRewriteBlock, ReviewSubmission, SplitMeta } from "../../core/types.ts";
 import type {
   User,
   AuthCode,
@@ -20,6 +20,8 @@ export interface SubPatchRecord {
     side: string;
     body: string;
   }[];
+  /** Experimental: rewrite blocks shown in place of the code they cover. */
+  rewrites?: ResolvedRewriteBlock[];
 }
 
 export interface Session {
@@ -38,6 +40,12 @@ export interface Session {
    * instead of all targeting the most recent session on submit.
    */
   agentSessionId?: string;
+  /**
+   * The NAP workspace the review was requested from. Set only when the
+   * platform vouched for the caller (X-Platform-Caller), so a submission can
+   * be handed back to that workspace's session.
+   */
+  agentWorkspaceId?: string;
   splitMeta: SplitMeta;
   subPatches: SubPatchRecord[];
   submission: ReviewSubmission | null;
@@ -65,8 +73,9 @@ export interface Storage {
     id: string,
     updates: Partial<Pick<Session, "status" | "submission" | "subPatches" | "updatedAt">>,
   ): Promise<Session | undefined>;
-  listSessions(filter?: {
-    userId?: string;
+  /** A user's sessions, newest first. Never lists across users. */
+  listSessions(filter: {
+    userId: string;
     agentId?: string;
     agentSessionId?: string;
   }): Promise<Session[]>;
